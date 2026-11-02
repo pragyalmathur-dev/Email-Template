@@ -221,6 +221,43 @@ export function updateDocumentImage(
 }
 
 /**
+ * Sanitizes uploaded HTML for safe, scrollable rendering inside the visual editor
+ * Prevents email client CSS resets (like body { overflow: hidden; height: 100% }) from locking scrolling.
+ */
+export function sanitizeNewsletterHtmlForEditor(rawHtml: string): string {
+  if (!rawHtml) return '';
+
+  let sanitized = rawHtml;
+
+  // 1. Rewrite <style> blocks that set overflow: hidden, height: 100%, or position: fixed on html/body
+  sanitized = sanitized.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (styleTag, cssContent) => {
+    const safeCss = cssContent
+      // Remove overflow: hidden on html/body
+      .replace(/overflow(-y|-x)?\s*:\s*hidden\s*(!important)?\s*;?/gi, 'overflow: visible !important;')
+      // Neutralize fixed heights that cause clipping
+      .replace(/height\s*:\s*(100%|100vh)\s*(!important)?\s*;?/gi, 'height: auto !important;')
+      .replace(/position\s*:\s*fixed\s*(!important)?\s*;?/gi, 'position: relative !important;')
+      // Scope body/html rules so they don't leak into the applet root window
+      .replace(/\b(html\s*,\s*body|body\s*,\s*html|body|html)\b/gi, '.newsletter-body-container');
+
+    return `<style>${safeCss}</style>`;
+  });
+
+  // 2. Neutralize inline style="...overflow: hidden..." on top-level elements
+  sanitized = sanitized.replace(/style=["']([^"']*)["']/gi, (match, styleVal) => {
+    if (/overflow\s*:\s*hidden/i.test(styleVal) || /height\s*:\s*100%/i.test(styleVal)) {
+      const safeStyle = styleVal
+        .replace(/overflow(-y|-x)?\s*:\s*hidden\s*(!important)?\s*;?/gi, 'overflow: visible !important;')
+        .replace(/height\s*:\s*100%\s*(!important)?\s*;?/gi, 'height: auto !important;');
+      return `style="${safeStyle}"`;
+    }
+    return match;
+  });
+
+  return sanitized;
+}
+
+/**
  * Parses raw uploaded HTML newsletter file into NewsletterDocument
  */
 export function parseUploadedHtml(rawHtml: string, filename: string): NewsletterDocument {
@@ -240,13 +277,15 @@ export function parseUploadedHtml(rawHtml: string, filename: string): Newsletter
     }
   }
 
+  const safeHtml = sanitizeNewsletterHtmlForEditor(rawHtml);
+
   // Create a raw HTML mode document that is directly editable and image-replaceable
   return {
     id: `uploaded-${Date.now()}`,
     name: title,
     updatedAt: new Date().toISOString(),
     rawHtmlMode: true,
-    rawHtmlContent: rawHtml,
+    rawHtmlContent: safeHtml,
     metadata: {
       title: title,
       subject: title,

@@ -55,12 +55,20 @@ export const HtmlExportModal: React.FC<HtmlExportModalProps> = ({
     }
   };
 
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+
   const handleOpenRawWindow = () => {
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const w = window.open(url, '_blank');
-    if (!w) {
-      alert('Popup blocker prevented opening window. Please use Download HTML.');
+    try {
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (!w) {
+        setNoticeMessage('Browser blocked popup tab. Please use "Download .html File" to inspect your newsletter.');
+        setTimeout(() => setNoticeMessage(null), 4000);
+      }
+    } catch {
+      setNoticeMessage('Could not open preview tab. Please use "Download .html File".');
+      setTimeout(() => setNoticeMessage(null), 4000);
     }
   };
 
@@ -85,6 +93,16 @@ export const HtmlExportModal: React.FC<HtmlExportModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Notice Message if any */}
+        {noticeMessage && (
+          <div className="px-6 py-2 bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
+            <span>{noticeMessage}</span>
+            <button onClick={() => setNoticeMessage(null)} className="text-amber-400 hover:text-amber-200">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Action Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-b border-neutral-800 bg-neutral-950/60">

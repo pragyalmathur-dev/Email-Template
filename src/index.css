@@ -34,3 +34,16 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.4);
 }
+
+/* Ensure uploaded HTML newsletters never clip or lock scrolling */
+.newsletter-body-container {
+  overflow: visible !important;
+  height: auto !important;
+  max-height: none !important;
+}
+
+.newsletter-body-container table,
+.newsletter-body-container td,
+.newsletter-body-container div {
+  max-height: none !important;
+}

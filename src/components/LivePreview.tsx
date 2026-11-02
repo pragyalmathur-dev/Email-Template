@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Replace,
   ArrowUp,
@@ -12,6 +12,18 @@ import {
 } from 'lucide-react';
 import { DetectedImage, NewsletterBlock, NewsletterDocument } from '../types/newsletter';
 import { ViewportMode } from './Header';
+import { TextFormatToolbar } from './TextFormatToolbar';
+import { HyperlinkModal } from './HyperlinkModal';
+import { SectionAnchorModal } from './SectionAnchorModal';
+import {
+  extractHtmlSections,
+  scrollToSectionInContainer,
+  DocumentSectionTarget,
+} from '../utils/sectionLinks';
+
+export interface LivePreviewHandle {
+  getLatestHtml: () => string | null;
+}
 
 interface LivePreviewProps {
   document: NewsletterDocument;
@@ -24,21 +36,178 @@ interface LivePreviewProps {
   onOpenImageReplacer: (img: DetectedImage) => void;
   viewport: ViewportMode;
   onUpdateRawHtml?: (newHtml: string) => void;
+  onMarkDirty?: () => void;
 }
 
-export const LivePreview: React.FC<LivePreviewProps> = ({
-  document,
-  selectedBlockId,
-  onSelectBlock,
-  onUpdateBlock,
-  onMoveBlock,
-  onDuplicateBlock,
-  onDeleteBlock,
-  onOpenImageReplacer,
-  viewport,
-  onUpdateRawHtml,
-}) => {
+export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>((
+  {
+    document,
+    selectedBlockId,
+    onSelectBlock,
+    onUpdateBlock,
+    onMoveBlock,
+    onDuplicateBlock,
+    onDeleteBlock,
+    onOpenImageReplacer,
+    viewport,
+    onUpdateRawHtml,
+    onMarkDirty,
+  },
+  ref
+) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const rawRendererRef = useRef<{ getHtml: () => string }>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+
+  // Link & Section Anchor Dialog State
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [linkModalText, setLinkModalText] = useState('');
+  const [linkModalHref, setLinkModalHref] = useState<string | undefined>(undefined);
+  const [isAnchorModalOpen, setIsAnchorModalOpen] = useState(false);
+  const [anchorModalText, setAnchorModalText] = useState('');
+
+  React.useImperativeHandle(ref, () => ({
+    getLatestHtml: () => {
+      if (rawRendererRef.current) {
+        return rawRendererRef.current.getHtml();
+      }
+      return null;
+    },
+  }));
+
+  // Extract all section targets from current document for hyperlink suggestions
+  const availableSections = useMemo<DocumentSectionTarget[]>(() => {
+    if (document.rawHtmlMode && document.rawHtmlContent) {
+      return extractHtmlSections(document.rawHtmlContent);
+    }
+    // Block mode sections
+    return document.blocks.map((b) => ({
+      id: b.id,
+      title: b.title || b.type,
+      tag: 'section',
+      isExistingAnchor: true,
+    }));
+  }, [document.rawHtmlMode, document.rawHtmlContent, document.blocks]);
+
+  // Selection management helpers
+  const saveCurrentSelection = useCallback(() => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      return sel.toString();
+    }
+    return '';
+  }, []);
+
+  const restoreSavedSelection = useCallback(() => {
+    if (savedRangeRef.current) {
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(savedRangeRef.current);
+      }
+    }
+  }, []);
+
+  const handleOpenLinkModal = useCallback((text?: string, currentHref?: string) => {
+    const selText = saveCurrentSelection() || text || '';
+    setLinkModalText(selText);
+    setLinkModalHref(currentHref);
+    setIsLinkModalOpen(true);
+  }, [saveCurrentSelection]);
+
+  const handleOpenAnchorModal = useCallback(() => {
+    const selText = saveCurrentSelection();
+    setAnchorModalText(selText);
+    setIsAnchorModalOpen(true);
+  }, [saveCurrentSelection]);
+
+  const handleApplyLink = useCallback((href: string, text?: string) => {
+    restoreSavedSelection();
+    const sel = window.getSelection();
+    if (!sel) return;
+
+    let anchorEl: HTMLAnchorElement | null = null;
+    let node: Node | null = sel.anchorNode;
+    while (node && node !== window.document.body) {
+      if (node.nodeName === 'A') {
+        anchorEl = node as HTMLAnchorElement;
+        break;
+      }
+      node = node.parentNode;
+    }
+
+    if (anchorEl) {
+      anchorEl.href = href;
+      if (text && text !== anchorEl.textContent) {
+        anchorEl.textContent = text;
+      }
+    } else {
+      if (sel.isCollapsed && text) {
+        const a = window.document.createElement('a');
+        a.href = href;
+        a.textContent = text;
+        a.style.color = 'inherit';
+        a.style.textDecoration = 'underline';
+        if (sel.rangeCount > 0) {
+          sel.getRangeAt(0).insertNode(a);
+        }
+      } else {
+        window.document.execCommand('createLink', false, href);
+      }
+    }
+
+    onMarkDirty?.();
+    if (document.rawHtmlMode && rawRendererRef.current) {
+      onUpdateRawHtml?.(rawRendererRef.current.getHtml());
+    }
+  }, [restoreSavedSelection, onMarkDirty, document.rawHtmlMode, onUpdateRawHtml]);
+
+  const handleRemoveLink = useCallback(() => {
+    restoreSavedSelection();
+    window.document.execCommand('unlink', false);
+    onMarkDirty?.();
+    if (document.rawHtmlMode && rawRendererRef.current) {
+      onUpdateRawHtml?.(rawRendererRef.current.getHtml());
+    }
+  }, [restoreSavedSelection, onMarkDirty, document.rawHtmlMode, onUpdateRawHtml]);
+
+  const handleApplyAnchor = useCallback((anchorId: string) => {
+    restoreSavedSelection();
+    const sel = window.getSelection();
+    if (!sel) return;
+
+    let targetEl: HTMLElement | null = null;
+    let node: Node | null = sel.anchorNode;
+    while (node && node !== window.document.body) {
+      if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'DIV', 'TR', 'TD'].includes(node.nodeName)) {
+        targetEl = node as HTMLElement;
+        break;
+      }
+      node = node.parentNode;
+    }
+
+    if (targetEl) {
+      targetEl.id = anchorId;
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const a = window.document.createElement('a');
+      a.id = anchorId;
+      a.name = anchorId;
+      a.appendChild(range.extractContents());
+      range.insertNode(a);
+    }
+
+    onMarkDirty?.();
+    if (document.rawHtmlMode && rawRendererRef.current) {
+      onUpdateRawHtml?.(rawRendererRef.current.getHtml());
+    }
+  }, [restoreSavedSelection, onMarkDirty, document.rawHtmlMode, onUpdateRawHtml]);
+
+  const handleTestJump = useCallback((targetId: string) => {
+    scrollToSectionInContainer(containerRef.current, targetId);
+  }, []);
 
   const maxWidthClass =
     viewport === 'mobile'
@@ -48,9 +217,22 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
       : 'w-full max-w-[680px]';
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col items-center bg-neutral-900/80 text-neutral-100">
+    <div
+      className="flex-1 overflow-y-scroll overflow-x-hidden min-h-0 h-full w-full p-4 md:p-8 flex flex-col items-center bg-neutral-900/80 text-neutral-100"
+      style={{ overflowY: 'scroll', WebkitOverflowScrolling: 'touch', minHeight: 0 }}
+    >
+      {/* Sticky Rich Text Formatting & Hyperlink Bar (Word-style: Bold, Italics, Underline, Link) */}
+      <div className={`${maxWidthClass} sticky top-0 z-30 mb-3 shadow-md`}>
+        <TextFormatToolbar
+          onOpenLinkModal={handleOpenLinkModal}
+          onAddSectionAnchor={handleOpenAnchorModal}
+          availableSections={availableSections}
+          onTestJump={handleTestJump}
+        />
+      </div>
+
       {/* Email Client Simulated Envelope Box */}
-      <div className={`${maxWidthClass} transition-all duration-200 mb-4 select-none`}>
+      <div className={`${maxWidthClass} transition-all duration-200 mb-4 select-none shrink-0`}>
         <div className="rounded-t-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-xs shadow-sm text-neutral-300">
           <div className="flex items-center justify-between border-b border-neutral-800 pb-2 mb-2">
             <div className="flex items-center gap-2">
@@ -83,19 +265,25 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
       {/* Main Newsletter Canvas Frame */}
       <div
         ref={containerRef}
-        className={`${maxWidthClass} transition-all duration-200 bg-white shadow-2xl rounded-b-xl overflow-hidden border border-neutral-800`}
+        className={`${maxWidthClass} transition-all duration-200 bg-white shadow-2xl rounded-b-xl border border-neutral-800 overflow-visible mb-16`}
         style={{
           fontFamily:
             document.metadata.fontFamily === 'serif'
               ? "'Plus Jakarta Sans', Georgia, sans-serif"
               : "'Plus Jakarta Sans', system-ui, sans-serif",
+          overflow: 'visible',
+          height: 'auto',
+          minHeight: '400px',
         }}
       >
         {document.rawHtmlMode && document.rawHtmlContent ? (
           <RawHtmlRenderer
+            ref={rawRendererRef}
             html={document.rawHtmlContent}
             onUpdateHtml={(newHtml) => onUpdateRawHtml?.(newHtml)}
             onOpenImageReplacer={onOpenImageReplacer}
+            onMarkDirty={onMarkDirty}
+            onOpenLinkModal={handleOpenLinkModal}
           />
         ) : (
           <div>
@@ -174,23 +362,41 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
         )}
       </div>
 
-      <div className="mt-6 text-center text-xs text-neutral-500">
-        Click any text to edit inline · Hover over images to replace · Drag sections on the left
-      </div>
+      {/* Hyperlink Dialog for Newsletter Sections and Web URLs */}
+      <HyperlinkModal
+        isOpen={isLinkModalOpen}
+        onClose={() => setIsLinkModalOpen(false)}
+        selectedText={linkModalText}
+        initialHref={linkModalHref}
+        availableSections={availableSections}
+        onApplyLink={handleApplyLink}
+        onRemoveLink={handleRemoveLink}
+        onTestJump={handleTestJump}
+      />
+
+      {/* Section Bookmark Anchor Modal */}
+      <SectionAnchorModal
+        isOpen={isAnchorModalOpen}
+        onClose={() => setIsAnchorModalOpen(false)}
+        selectedText={anchorModalText}
+        onApplyAnchor={handleApplyAnchor}
+      />
     </div>
   );
-};
+});
 
-// Helper for inline text editing
+// Helper for inline text editing (Microsoft Word style - no cursor jump)
 function EditableText({
   value,
   onChange,
+  onMarkDirty,
   className = '',
   tag: Tag = 'span',
   placeholder = '',
 }: {
   value: string;
   onChange: (v: string) => void;
+  onMarkDirty?: () => void;
   className?: string;
   tag?: any;
   placeholder?: string;
@@ -199,11 +405,14 @@ function EditableText({
     <Tag
       contentEditable
       suppressContentEditableWarning
-      onInput={(e: React.FormEvent<HTMLElement>) => {
-        onChange(e.currentTarget.textContent || '');
+      onInput={() => {
+        onMarkDirty?.();
       }}
       onBlur={(e: React.FocusEvent<HTMLElement>) => {
-        onChange(e.currentTarget.textContent || '');
+        const text = e.currentTarget.textContent || '';
+        if (text !== value) {
+          onChange(text);
+        }
       }}
       className={`outline-none hover:ring-1 hover:ring-amber-500/40 rounded px-0.5 focus:ring-2 focus:ring-amber-500 cursor-text transition-shadow ${className}`}
       data-placeholder={placeholder}
@@ -851,24 +1060,37 @@ function renderBlockView(
   }
 }
 
-// Sub-renderer for user-uploaded raw HTML newsletters
-function RawHtmlRenderer({
-  html,
-  onUpdateHtml,
-  onOpenImageReplacer,
-}: {
-  html: string;
-  onUpdateHtml: (newHtml: string) => void;
-  onOpenImageReplacer: (img: DetectedImage) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isTypingRef = useRef(false);
+interface RawHtmlRendererHandle {
+  getHtml: () => string;
+}
 
-  // Sync external HTML changes (like Undo/Redo or image replacement) to the DOM
+// Sub-renderer for user-uploaded raw HTML newsletters (Word-style natural typing)
+const RawHtmlRenderer = React.forwardRef<
+  RawHtmlRendererHandle,
+  {
+    html: string;
+    onUpdateHtml: (newHtml: string) => void;
+    onOpenImageReplacer: (img: DetectedImage) => void;
+    onMarkDirty?: () => void;
+    onOpenLinkModal?: (text?: string, currentHref?: string) => void;
+  }
+>(({ html, onUpdateHtml, onOpenImageReplacer, onMarkDirty, onOpenLinkModal }, ref) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastLoadedHtmlRef = useRef<string>('');
+
+  React.useImperativeHandle(ref, () => ({
+    getHtml: () => {
+      return containerRef.current ? containerRef.current.innerHTML : html;
+    },
+  }));
+
+  // Initialize or sync DOM only when html changes externally (initial load, image replace, undo/redo)
   React.useEffect(() => {
     if (!containerRef.current) return;
-    if (!isTypingRef.current && containerRef.current.innerHTML !== html) {
+
+    if (containerRef.current.innerHTML !== html) {
       containerRef.current.innerHTML = html;
+      lastLoadedHtmlRef.current = html;
     }
 
     // Attach click and replace handlers to all detected <img> tags
@@ -899,34 +1121,60 @@ function RawHtmlRenderer({
         });
       };
     });
-  }, [html, onOpenImageReplacer]);
+
+    // Intercept internal section anchor clicks (<a href="#...">) for instant preview jumping
+    const handleAnchorClick = (e: MouseEvent) => {
+      const link = (e.target as HTMLElement).closest('a');
+      if (link) {
+        const href = link.getAttribute('href');
+        if (href && href.startsWith('#')) {
+          e.preventDefault();
+          scrollToSectionInContainer(containerRef.current, href);
+        }
+      }
+    };
+
+    const containerEl = containerRef.current;
+    containerEl.addEventListener('click', handleAnchorClick);
+
+    // Ctrl+K shortcut inside editor to trigger hyperlink dialog
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        onOpenLinkModal?.(sel ? sel.toString() : '');
+      }
+    };
+    containerEl.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      containerEl.removeEventListener('click', handleAnchorClick);
+      containerEl.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [html, onOpenImageReplacer, onOpenLinkModal]);
 
   return (
-    <div className="p-2 relative group/raw">
+    <div className="p-2 relative group/raw w-full overflow-visible">
       <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs px-3.5 py-2 rounded-lg mb-3 flex items-center justify-between">
         <span className="font-medium">
-          Uploaded HTML Mode Active: Click any text to edit inline. Click any photo to replace it.
+          Uploaded HTML Mode Active: Click any text to type, edit, add, or delete. Select text for Bold, Italic, Underline & Hyperlinks.
         </span>
-        <span className="text-[10px] text-amber-400 font-mono">Auto-saving enabled</span>
+        <span className="text-[11px] text-amber-400 font-medium">Click "Save Changes" (Ctrl+S) when done</span>
       </div>
       <div
         ref={containerRef}
         contentEditable
         suppressContentEditableWarning
-        onFocus={() => {
-          isTypingRef.current = true;
-        }}
-        onInput={(e) => {
-          isTypingRef.current = true;
-          onUpdateHtml(e.currentTarget.innerHTML);
+        onInput={() => {
+          // Native Word-style typing: do NOT trigger React re-renders on keystrokes!
+          onMarkDirty?.();
         }}
         onBlur={(e) => {
-          isTypingRef.current = false;
           onUpdateHtml(e.currentTarget.innerHTML);
         }}
-        dangerouslySetInnerHTML={{ __html: html }}
-        className="outline-none focus:ring-1 focus:ring-amber-500/40 rounded min-h-[300px]"
+        className="outline-none focus:ring-1 focus:ring-amber-500/40 rounded min-h-[500px] w-full overflow-visible newsletter-body-container"
+        style={{ overflow: 'visible', height: 'auto' }}
       />
     </div>
   );
-}
+});
