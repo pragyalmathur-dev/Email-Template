@@ -1,0 +1,6 @@
+{
+  "name": "EditoMail - HTML Newsletter Studio",
+  "description": "Professional drag-and-drop HTML newsletter editor with live preview, inline content & image replacement, and clean HTML export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
