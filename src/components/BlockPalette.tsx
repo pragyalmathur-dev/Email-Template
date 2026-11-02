@@ -11,6 +11,11 @@ import {
   Megaphone,
   Footprints,
   Code2,
+  MousePointerClick,
+  Space,
+  Minus,
+  MessageSquareQuote,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { BlockType, NewsletterBlock } from '../types/newsletter';
 import { PRESET_IMAGES } from '../utils/svgAssets';
@@ -27,6 +32,36 @@ interface BlockTemplateMeta {
 }
 
 const BLOCK_TEMPLATES: BlockTemplateMeta[] = [
+  {
+    type: 'button-block',
+    label: 'Call-to-Action Button',
+    description: 'Brevo-style bulletproof button for links & section jumps',
+    icon: MousePointerClick,
+  },
+  {
+    type: 'image-block',
+    label: 'Image Banner',
+    description: 'Responsive photo with optional link, alignment & caption',
+    icon: ImageIcon,
+  },
+  {
+    type: 'spacer-block',
+    label: 'Blank Spacer',
+    description: 'Configurable vertical breathing room between sections',
+    icon: Space,
+  },
+  {
+    type: 'divider-block',
+    label: 'Divider Line',
+    description: 'Horizontal separator line with custom style & color',
+    icon: Minus,
+  },
+  {
+    type: 'callout-block',
+    label: 'Callout / Note Box',
+    description: 'Highlighted card with accent border for notes or quotes',
+    icon: MessageSquareQuote,
+  },
   {
     type: 'hero',
     label: 'Hero Cover Story',
@@ -93,6 +128,63 @@ export function createDefaultBlock(type: BlockType): NewsletterBlock {
   const id = `block-${type}-${Date.now()}`;
 
   switch (type) {
+    case 'button-block':
+      return {
+        id,
+        type: 'button-block',
+        title: 'CTA Button',
+        buttonText: 'Explore Now',
+        buttonUrl: '#',
+        buttonBg: '#f59e0b',
+        buttonTextColor: '#171717',
+        align: 'center',
+        radius: 'rounded',
+      };
+
+    case 'image-block':
+      return {
+        id,
+        type: 'image-block',
+        title: 'Image Banner',
+        imageUrl: PRESET_IMAGES[0].dataUri,
+        imageAlt: 'Curated architectural photography',
+        caption: 'Photography survey from our seasonal project portfolio.',
+        linkUrl: '#',
+        align: 'center',
+        width: '100%',
+      };
+
+    case 'spacer-block':
+      return {
+        id,
+        type: 'spacer-block',
+        title: 'Blank Space',
+        height: 30,
+        backgroundColor: 'transparent',
+      };
+
+    case 'divider-block':
+      return {
+        id,
+        type: 'divider-block',
+        title: 'Divider Line',
+        dividerStyle: 'solid',
+        color: '#e5e7eb',
+        thickness: 1,
+        widthPercent: 100,
+        margin: 20,
+      };
+
+    case 'callout-block':
+      return {
+        id,
+        type: 'callout-block',
+        title: 'Callout Box',
+        calloutTitle: 'EDITORIAL NOTE',
+        content: 'Natural materials and balanced proportions are at the heart of our craft. Every edition explores stories from our community.',
+        theme: 'ivory',
+      };
+
     case 'hero':
       return {
         id,

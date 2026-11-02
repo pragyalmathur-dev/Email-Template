@@ -8,6 +8,11 @@ export type BlockType =
   | 'quote'
   | 'milestones'
   | 'cta-banner'
+  | 'button-block'
+  | 'spacer-block'
+  | 'divider-block'
+  | 'callout-block'
+  | 'image-block'
   | 'footer'
   | 'custom-html';
 
@@ -157,6 +162,48 @@ export interface FooterBlock extends BaseBlock {
   viewOnlineUrl?: string;
 }
 
+export interface ButtonBlock extends BaseBlock {
+  type: 'button-block';
+  buttonText: string;
+  buttonUrl: string;
+  buttonBg?: string;
+  buttonTextColor?: string;
+  align?: 'left' | 'center' | 'right' | 'full';
+  radius?: 'pill' | 'rounded' | 'square';
+}
+
+export interface SpacerBlock extends BaseBlock {
+  type: 'spacer-block';
+  height: number;
+  backgroundColor?: string;
+}
+
+export interface DividerBlock extends BaseBlock {
+  type: 'divider-block';
+  dividerStyle?: 'solid' | 'dashed' | 'dotted' | 'double';
+  color?: string;
+  thickness?: number;
+  widthPercent?: number;
+  margin?: number;
+}
+
+export interface CalloutBlock extends BaseBlock {
+  type: 'callout-block';
+  calloutTitle?: string;
+  content: string;
+  theme?: 'ivory' | 'amber' | 'slate' | 'dark';
+}
+
+export interface ImageBlock extends BaseBlock {
+  type: 'image-block';
+  imageUrl: string;
+  imageAlt: string;
+  caption?: string;
+  linkUrl?: string;
+  align?: 'left' | 'center' | 'right';
+  width?: '100%' | '80%' | '480px' | '280px';
+}
+
 export interface CustomHtmlBlock extends BaseBlock {
   type: 'custom-html';
   htmlContent: string;
@@ -173,6 +220,11 @@ export type NewsletterBlock =
   | QuoteBlock
   | MilestonesBlock
   | CtaBannerBlock
+  | ButtonBlock
+  | SpacerBlock
+  | DividerBlock
+  | CalloutBlock
+  | ImageBlock
   | FooterBlock
   | CustomHtmlBlock;
 

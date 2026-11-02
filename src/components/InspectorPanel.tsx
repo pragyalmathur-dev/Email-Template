@@ -571,6 +571,252 @@ function renderBlockControls(
         </div>
       );
 
+    case 'button-block':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="text-neutral-400 block mb-1">Button Label</label>
+            <input
+              type="text"
+              value={block.buttonText}
+              onChange={(e) => onUpdate({ ...block, buttonText: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-100"
+            />
+          </div>
+          <div>
+            <label className="text-neutral-400 block mb-1">Link URL or Anchor</label>
+            <input
+              type="text"
+              value={block.buttonUrl}
+              onChange={(e) => onUpdate({ ...block, buttonUrl: e.target.value })}
+              placeholder="https://... or #section-id"
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-100 font-mono"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-neutral-400 block mb-1">Button Color</label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={block.buttonBg || '#f59e0b'}
+                  onChange={(e) => onUpdate({ ...block, buttonBg: e.target.value })}
+                  className="w-7 h-7 rounded border border-neutral-700 bg-transparent cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={block.buttonBg || '#f59e0b'}
+                  onChange={(e) => onUpdate({ ...block, buttonBg: e.target.value })}
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 font-mono"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-neutral-400 block mb-1">Alignment</label>
+              <select
+                value={block.align || 'center'}
+                onChange={(e) => onUpdate({ ...block, align: e.target.value as any })}
+                className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200"
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+                <option value="full">Full Width</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      );
+
+    case 'image-block':
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-neutral-400">Image Source</label>
+            <button
+              type="button"
+              onClick={() =>
+                onOpenImageReplacer({
+                  id: `${block.id}-img`,
+                  blockId: block.id,
+                  blockTitle: block.title || 'Image Banner',
+                  blockType: block.type,
+                  fieldKey: 'imageUrl',
+                  url: block.imageUrl,
+                  alt: block.imageAlt,
+                  caption: block.caption,
+                })
+              }
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded shadow"
+            >
+              <Replace className="w-3.5 h-3.5" /> Replace Photo
+            </button>
+          </div>
+          <div>
+            <label className="text-neutral-400 block mb-1">Alt Text</label>
+            <input
+              type="text"
+              value={block.imageAlt}
+              onChange={(e) => onUpdate({ ...block, imageAlt: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-100"
+            />
+          </div>
+          <div>
+            <label className="text-neutral-400 block mb-1">Optional Caption</label>
+            <input
+              type="text"
+              value={block.caption || ''}
+              onChange={(e) => onUpdate({ ...block, caption: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-100"
+            />
+          </div>
+          <div>
+            <label className="text-neutral-400 block mb-1">Clickable Link URL</label>
+            <input
+              type="text"
+              value={block.linkUrl || ''}
+              onChange={(e) => onUpdate({ ...block, linkUrl: e.target.value })}
+              placeholder="https://... or #section-id"
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-100 font-mono"
+            />
+          </div>
+        </div>
+      );
+
+    case 'spacer-block':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="text-neutral-400 block mb-1">
+              Spacer Height: {block.height || 30}px
+            </label>
+            <input
+              type="range"
+              min="5"
+              max="120"
+              step="5"
+              value={block.height || 30}
+              onChange={(e) => onUpdate({ ...block, height: Number(e.target.value) })}
+              className="w-full accent-amber-500 cursor-pointer"
+            />
+          </div>
+          <div className="flex gap-1.5">
+            {[10, 20, 30, 40, 60, 80].map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => onUpdate({ ...block, height: h })}
+                className={`flex-1 py-1 text-xs rounded border font-mono ${
+                  (block.height || 30) === h
+                    ? 'bg-amber-500 text-neutral-950 font-bold border-amber-500'
+                    : 'bg-neutral-900 border-neutral-700 text-neutral-300'
+                }`}
+              >
+                {h}px
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+
+    case 'divider-block':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="text-neutral-400 block mb-1">Line Style</label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {(['solid', 'dashed', 'dotted', 'double'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => onUpdate({ ...block, dividerStyle: st })}
+                  className={`py-1 text-xs capitalize rounded border font-medium ${
+                    (block.dividerStyle || 'solid') === st
+                      ? 'bg-amber-500 text-neutral-950 font-bold border-amber-500'
+                      : 'bg-neutral-900 border-neutral-700 text-neutral-300'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-neutral-400 block mb-1">Width (%)</label>
+              <input
+                type="number"
+                min="10"
+                max="100"
+                step="10"
+                value={block.widthPercent || 100}
+                onChange={(e) => onUpdate({ ...block, widthPercent: Number(e.target.value) })}
+                className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1 text-xs text-neutral-100"
+              />
+            </div>
+            <div>
+              <label className="text-neutral-400 block mb-1">Thickness (px)</label>
+              <input
+                type="number"
+                min="1"
+                max="6"
+                value={block.thickness || 1}
+                onChange={(e) => onUpdate({ ...block, thickness: Number(e.target.value) })}
+                className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1 text-xs text-neutral-100"
+              />
+            </div>
+          </div>
+        </div>
+      );
+
+    case 'callout-block':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="text-neutral-400 block mb-1">Title</label>
+            <input
+              type="text"
+              value={block.calloutTitle || ''}
+              onChange={(e) => onUpdate({ ...block, calloutTitle: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-100"
+            />
+          </div>
+          <div>
+            <label className="text-neutral-400 block mb-1">Content</label>
+            <textarea
+              rows={4}
+              value={block.content}
+              onChange={(e) => onUpdate({ ...block, content: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+            />
+          </div>
+          <div>
+            <label className="text-neutral-400 block mb-1">Theme</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'ivory', name: 'Warm Ivory' },
+                { id: 'amber', name: 'Amber' },
+                { id: 'slate', name: 'Slate' },
+                { id: 'dark', name: 'Dark Luxe' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onUpdate({ ...block, theme: t.id as any })}
+                  className={`py-1.5 px-2 rounded border text-xs text-left ${
+                    (block.theme || 'ivory') === t.id
+                      ? 'bg-neutral-800 border-amber-500 text-amber-300'
+                      : 'bg-neutral-900 border-neutral-700 text-neutral-400'
+                  }`}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+
     case 'custom-html':
       return (
         <div className="space-y-3">

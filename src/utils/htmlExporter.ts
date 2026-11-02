@@ -555,6 +555,134 @@ function renderBlockHtml(block: NewsletterBlock, ctx: RenderContext): string {
       </tr>`;
     }
 
+    case 'button-block': {
+      const align = block.align || 'center';
+      const radius = block.radius === 'pill' ? '9999px' : block.radius === 'square' ? '0px' : '6px';
+      const bg = block.buttonBg || ctx.accent;
+      const text = block.buttonTextColor || '#ffffff';
+      const tableWidth = align === 'full' ? 'width="100%"' : '';
+      const tableMargin =
+        align === 'center'
+          ? 'margin: 20px auto;'
+          : align === 'right'
+          ? 'margin: 20px 0 20px auto;'
+          : 'margin: 20px 0;';
+
+      return `
+      <!-- Block: Brevo-style CTA Button -->
+      <tr>
+        <td align="${align === 'full' ? 'center' : align}" style="padding: 16px 24px;" class="mobile-padding">
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" ${tableWidth} style="${tableMargin} border-collapse: separate;">
+            <tr>
+              <td align="${align === 'full' ? 'center' : align}" style="border-radius: ${radius}; background-color: ${bg};">
+                <a href="${escapeHtml(block.buttonUrl || '#')}" target="_blank" rel="noopener noreferrer" style="display: ${align === 'full' ? 'block' : 'inline-block'}; padding: 12px 28px; font-size: 14px; color: ${text}; background-color: ${bg}; font-weight: 600; text-decoration: none; text-align: center; border-radius: ${radius}; border: 1px solid ${bg}; letter-spacing: 0.05em; text-transform: uppercase;">
+                  ${escapeHtml(block.buttonText || 'Click Here')}
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
+    }
+
+    case 'image-block': {
+      const align = block.align || 'center';
+      const width = block.width || '100%';
+      const marginCss =
+        align === 'center'
+          ? '0 auto'
+          : align === 'right'
+          ? '0 0 0 auto'
+          : '0 auto 0 0';
+
+      const imgHtml = `<img src="${escapeHtml(block.imageUrl)}" alt="${escapeHtml(block.imageAlt || '')}" width="${width}" style="display: block; width: ${width}; max-width: 100%; height: auto; border: 0; outline: none; border-radius: 4px; margin: ${marginCss};" />`;
+
+      const content = block.linkUrl
+        ? `<a href="${escapeHtml(block.linkUrl)}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; border: 0; display: block;">${imgHtml}</a>`
+        : imgHtml;
+
+      return `
+      <!-- Block: Brevo-style Image Banner -->
+      <tr>
+        <td align="${align}" style="padding: 16px 24px;" class="mobile-padding">
+          ${content}
+          ${
+            block.caption
+              ? `<div style="font-size: 11px; color: #78716c; margin-top: 6px; text-align: ${align}; font-style: italic;">${escapeHtml(block.caption)}</div>`
+              : ''
+          }
+        </td>
+      </tr>`;
+    }
+
+    case 'spacer-block': {
+      const height = block.height || 30;
+      const bg = block.backgroundColor && block.backgroundColor !== 'transparent'
+        ? `background-color: ${block.backgroundColor};`
+        : '';
+
+      return `
+      <!-- Block: Brevo-style Blank Spacer -->
+      <tr>
+        <td height="${height}" style="font-size: 1px; line-height: ${height}px; height: ${height}px; mso-line-height-rule: exactly; ${bg}">
+          &nbsp;
+        </td>
+      </tr>`;
+    }
+
+    case 'divider-block': {
+      const width = block.widthPercent || 100;
+      const thickness = block.thickness || 1;
+      const style = block.dividerStyle || 'solid';
+      const color = block.color || '#e5e7eb';
+      const margin = block.margin || 20;
+
+      return `
+      <!-- Block: Brevo-style Divider Line -->
+      <tr>
+        <td align="center" style="padding: ${margin}px 24px;" class="mobile-padding">
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="${width}%" style="width: ${width}%;">
+            <tr>
+              <td style="border-top: ${thickness}px ${style} ${color}; font-size: 1px; line-height: 1px; height: 1px;">
+                &nbsp;
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
+    }
+
+    case 'callout-block': {
+      const themes: Record<string, { bg: string; border: string; text: string; title: string }> = {
+        ivory: { bg: '#faf5ee', border: '#934b35', text: '#44403c', title: '#934b35' },
+        amber: { bg: '#fffbeb', border: '#f59e0b', text: '#78350f', title: '#b45309' },
+        slate: { bg: '#f8fafc', border: '#64748b', text: '#334155', title: '#0f172a' },
+        dark: { bg: '#1c1917', border: '#f59e0b', text: '#e7e5e4', title: '#f59e0b' },
+      };
+      const th = themes[block.theme || 'ivory'] || themes.ivory;
+
+      return `
+      <!-- Block: Brevo-style Callout Box -->
+      <tr>
+        <td style="padding: 16px 24px;" class="mobile-padding">
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td style="background-color: ${th.bg}; border-left: 4px solid ${th.border}; border-radius: 4px; padding: 18px 22px;">
+                ${
+                  block.calloutTitle
+                    ? `<div style="font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 700; color: ${th.title}; margin-bottom: 8px;">${escapeHtml(block.calloutTitle)}</div>`
+                    : ''
+                }
+                <div style="font-size: 14px; line-height: 1.6; color: ${th.text};">
+                  ${escapeHtml(block.content)}
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
+    }
+
     case 'custom-html': {
       return `
       <!-- Block: Custom HTML -->

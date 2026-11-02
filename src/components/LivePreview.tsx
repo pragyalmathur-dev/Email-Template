@@ -10,11 +10,16 @@ import {
   Calendar,
   ExternalLink,
 } from 'lucide-react';
-import { DetectedImage, NewsletterBlock, NewsletterDocument } from '../types/newsletter';
+import { DetectedImage, NewsletterBlock, NewsletterDocument, BlockType } from '../types/newsletter';
+import { createDefaultBlock } from './BlockPalette';
 import { ViewportMode } from './Header';
 import { TextFormatToolbar } from './TextFormatToolbar';
 import { HyperlinkModal } from './HyperlinkModal';
 import { SectionAnchorModal } from './SectionAnchorModal';
+import { InsertButtonModal } from './InsertButtonModal';
+import { InsertSpacerModal } from './InsertSpacerModal';
+import { InsertImageModal } from './InsertImageModal';
+import { InsertCalloutModal } from './InsertCalloutModal';
 import {
   extractHtmlSections,
   scrollToSectionInContainer,
@@ -30,6 +35,7 @@ interface LivePreviewProps {
   selectedBlockId: string | null;
   onSelectBlock: (id: string) => void;
   onUpdateBlock: (updated: NewsletterBlock) => void;
+  onAddBlock?: (newBlock: NewsletterBlock) => void;
   onMoveBlock: (index: number, direction: 'up' | 'down') => void;
   onDuplicateBlock: (index: number) => void;
   onDeleteBlock: (index: number) => void;
@@ -45,6 +51,7 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
     selectedBlockId,
     onSelectBlock,
     onUpdateBlock,
+    onAddBlock,
     onMoveBlock,
     onDuplicateBlock,
     onDeleteBlock,
@@ -56,7 +63,10 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
   ref
 ) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const rawRendererRef = useRef<{ getHtml: () => string }>(null);
+  const rawRendererRef = useRef<{
+    getHtml: () => string;
+    insertHtmlAtCursor: (html: string) => void;
+  }>(null);
   const savedRangeRef = useRef<Range | null>(null);
 
   // Link & Section Anchor Dialog State
@@ -65,6 +75,12 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
   const [linkModalHref, setLinkModalHref] = useState<string | undefined>(undefined);
   const [isAnchorModalOpen, setIsAnchorModalOpen] = useState(false);
   const [anchorModalText, setAnchorModalText] = useState('');
+
+  // Brevo Element Insertion Dialog States
+  const [isButtonModalOpen, setIsButtonModalOpen] = useState(false);
+  const [isSpacerModalOpen, setIsSpacerModalOpen] = useState(false);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isCalloutModalOpen, setIsCalloutModalOpen] = useState(false);
 
   React.useImperativeHandle(ref, () => ({
     getLatestHtml: () => {
@@ -209,6 +225,25 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
     scrollToSectionInContainer(containerRef.current, targetId);
   }, []);
 
+  const handleInsertHtmlElement = useCallback(
+    (htmlString: string, fallbackBlockType?: BlockType) => {
+      restoreSavedSelection();
+      if (document.rawHtmlMode && rawRendererRef.current) {
+        rawRendererRef.current.insertHtmlAtCursor(htmlString);
+      } else if (onAddBlock && fallbackBlockType) {
+        onAddBlock(createDefaultBlock(fallbackBlockType));
+      } else if (onAddBlock) {
+        onAddBlock({
+          id: `block-html-${Date.now()}`,
+          type: 'custom-html',
+          htmlContent: htmlString,
+        });
+      }
+      onMarkDirty?.();
+    },
+    [document.rawHtmlMode, onAddBlock, onMarkDirty, restoreSavedSelection]
+  );
+
   const maxWidthClass =
     viewport === 'mobile'
       ? 'w-[375px]'
@@ -228,6 +263,22 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
           onAddSectionAnchor={handleOpenAnchorModal}
           availableSections={availableSections}
           onTestJump={handleTestJump}
+          onOpenInsertButton={() => {
+            saveCurrentSelection();
+            setIsButtonModalOpen(true);
+          }}
+          onOpenInsertImage={() => {
+            saveCurrentSelection();
+            setIsImageModalOpen(true);
+          }}
+          onOpenInsertSpacer={() => {
+            saveCurrentSelection();
+            setIsSpacerModalOpen(true);
+          }}
+          onOpenInsertCallout={() => {
+            saveCurrentSelection();
+            setIsCalloutModalOpen(true);
+          }}
         />
       </div>
 
@@ -380,6 +431,36 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
         onClose={() => setIsAnchorModalOpen(false)}
         selectedText={anchorModalText}
         onApplyAnchor={handleApplyAnchor}
+      />
+
+      {/* Brevo: Add Button Modal */}
+      <InsertButtonModal
+        isOpen={isButtonModalOpen}
+        onClose={() => setIsButtonModalOpen(false)}
+        availableSections={availableSections}
+        onInsert={(btnHtml) => handleInsertHtmlElement(btnHtml, 'button-block')}
+      />
+
+      {/* Brevo: Add Space / Divider Modal */}
+      <InsertSpacerModal
+        isOpen={isSpacerModalOpen}
+        onClose={() => setIsSpacerModalOpen(false)}
+        onInsert={(spacerHtml) => handleInsertHtmlElement(spacerHtml, 'spacer-block')}
+      />
+
+      {/* Brevo: Add Image Modal */}
+      <InsertImageModal
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        availableSections={availableSections}
+        onInsert={(imgHtml) => handleInsertHtmlElement(imgHtml, 'image-block')}
+      />
+
+      {/* Brevo: Add Callout / Highlight Modal */}
+      <InsertCalloutModal
+        isOpen={isCalloutModalOpen}
+        onClose={() => setIsCalloutModalOpen(false)}
+        onInsert={(calloutHtml) => handleInsertHtmlElement(calloutHtml, 'callout-block')}
       />
     </div>
   );
@@ -1047,6 +1128,155 @@ function renderBlockView(
         </div>
       );
 
+    case 'button-block': {
+      const alignClass =
+        block.align === 'center'
+          ? 'justify-center'
+          : block.align === 'right'
+          ? 'justify-end'
+          : 'justify-start';
+      const radiusClass =
+        block.radius === 'pill'
+          ? 'rounded-full'
+          : block.radius === 'square'
+          ? 'rounded-none'
+          : 'rounded-md';
+      return (
+        <div className={`px-8 py-5 bg-white flex ${alignClass}`}>
+          <span
+            style={{
+              backgroundColor: block.buttonBg || accentColor,
+              color: block.buttonTextColor || '#ffffff',
+            }}
+            className={`px-7 py-3 text-xs uppercase font-bold tracking-wider shadow ${radiusClass} transition-transform hover:scale-102 cursor-pointer inline-flex items-center gap-1.5`}
+          >
+            <EditableText
+              value={block.buttonText}
+              onChange={(v) => onUpdate({ ...block, buttonText: v })}
+            />
+            <span>&rarr;</span>
+          </span>
+        </div>
+      );
+    }
+
+    case 'image-block': {
+      const alignClass =
+        block.align === 'center'
+          ? 'items-center text-center'
+          : block.align === 'right'
+          ? 'items-end text-right'
+          : 'items-start text-left';
+      return (
+        <div className={`px-8 py-4 bg-white flex flex-col ${alignClass}`}>
+          <div className="relative group/image overflow-hidden rounded max-w-full">
+            <img
+              src={block.imageUrl}
+              alt={block.imageAlt}
+              style={{ width: block.width || '100%' }}
+              className="max-h-[500px] object-cover"
+            />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenImageReplacer({
+                    id: `${block.id}-img`,
+                    blockId: block.id,
+                    blockTitle: block.title || 'Image Banner',
+                    blockType: block.type,
+                    fieldKey: 'imageUrl',
+                    url: block.imageUrl,
+                    alt: block.imageAlt,
+                    caption: block.caption,
+                  });
+                }}
+                className="px-4 py-2 text-xs font-semibold text-neutral-900 bg-amber-400 hover:bg-amber-300 rounded-lg shadow-lg flex items-center gap-1.5 transition-transform hover:scale-105"
+              >
+                <Replace className="w-4 h-4" />
+                Replace Image
+              </button>
+            </div>
+          </div>
+          {block.caption && (
+            <div className="pt-2 text-[11px] text-neutral-500 italic max-w-md">
+              <EditableText
+                value={block.caption}
+                onChange={(v) => onUpdate({ ...block, caption: v })}
+              />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    case 'spacer-block':
+      return (
+        <div
+          style={{
+            height: `${block.height || 30}px`,
+            backgroundColor: block.backgroundColor !== 'transparent' ? block.backgroundColor : 'transparent',
+          }}
+          className="w-full relative group/spacer flex items-center justify-center hover:bg-amber-500/5 transition-colors border border-transparent hover:border-amber-500/20"
+        >
+          <span className="opacity-0 group-hover/spacer:opacity-100 text-[10px] font-mono text-stone-400 bg-stone-100 px-2 py-0.5 rounded shadow-sm">
+            {block.height || 30}px Space
+          </span>
+        </div>
+      );
+
+    case 'divider-block':
+      return (
+        <div
+          style={{ padding: `${(block.margin || 20) / 2}px 32px` }}
+          className="bg-white flex items-center justify-center"
+        >
+          <div
+            style={{
+              width: `${block.widthPercent || 100}%`,
+              borderTop: `${block.thickness || 1}px ${block.dividerStyle || 'solid'} ${block.color || '#e5e7eb'}`,
+            }}
+          />
+        </div>
+      );
+
+    case 'callout-block': {
+      const themes: Record<string, { bg: string; border: string; text: string; title: string }> = {
+        ivory: { bg: '#faf5ee', border: '#934b35', text: '#44403c', title: '#934b35' },
+        amber: { bg: '#fffbeb', border: '#f59e0b', text: '#78350f', title: '#b45309' },
+        slate: { bg: '#f8fafc', border: '#64748b', text: '#334155', title: '#0f172a' },
+        dark: { bg: '#1c1917', border: '#f59e0b', text: '#e7e5e4', title: '#f59e0b' },
+      };
+      const th = themes[block.theme || 'ivory'] || themes.ivory;
+      return (
+        <div className="px-8 py-4 bg-white">
+          <div
+            style={{ backgroundColor: th.bg, borderLeft: `4px solid ${th.border}` }}
+            className="p-5 rounded shadow-sm text-left"
+          >
+            {block.calloutTitle && (
+              <div
+                style={{ color: th.title }}
+                className="text-[11px] font-bold tracking-widest uppercase mb-1.5"
+              >
+                <EditableText
+                  value={block.calloutTitle}
+                  onChange={(v) => onUpdate({ ...block, calloutTitle: v })}
+                />
+              </div>
+            )}
+            <div style={{ color: th.text }} className="text-sm leading-relaxed">
+              <EditableText
+                value={block.content}
+                onChange={(v) => onUpdate({ ...block, content: v })}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     case 'custom-html':
       return (
         <div
@@ -1062,6 +1292,7 @@ function renderBlockView(
 
 interface RawHtmlRendererHandle {
   getHtml: () => string;
+  insertHtmlAtCursor: (htmlString: string) => void;
 }
 
 // Sub-renderer for user-uploaded raw HTML newsletters (Word-style natural typing)
@@ -1078,22 +1309,8 @@ const RawHtmlRenderer = React.forwardRef<
   const containerRef = useRef<HTMLDivElement>(null);
   const lastLoadedHtmlRef = useRef<string>('');
 
-  React.useImperativeHandle(ref, () => ({
-    getHtml: () => {
-      return containerRef.current ? containerRef.current.innerHTML : html;
-    },
-  }));
-
-  // Initialize or sync DOM only when html changes externally (initial load, image replace, undo/redo)
-  React.useEffect(() => {
+  const bindImageHandlers = useCallback(() => {
     if (!containerRef.current) return;
-
-    if (containerRef.current.innerHTML !== html) {
-      containerRef.current.innerHTML = html;
-      lastLoadedHtmlRef.current = html;
-    }
-
-    // Attach click and replace handlers to all detected <img> tags
     const images = containerRef.current.querySelectorAll('img');
     images.forEach((img, idx) => {
       img.style.cursor = 'pointer';
@@ -1121,6 +1338,63 @@ const RawHtmlRenderer = React.forwardRef<
         });
       };
     });
+  }, [onOpenImageReplacer]);
+
+  React.useImperativeHandle(ref, () => ({
+    getHtml: () => {
+      return containerRef.current ? containerRef.current.innerHTML : html;
+    },
+    insertHtmlAtCursor: (htmlString: string) => {
+      if (!containerRef.current) return;
+      containerRef.current.focus();
+
+      const sel = window.getSelection();
+      let inserted = false;
+      if (sel && sel.rangeCount > 0 && containerRef.current.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlString;
+        const frag = document.createDocumentFragment();
+        let node: Node | null;
+        let lastNode: Node | null = null;
+        while ((node = tempDiv.firstChild)) {
+          lastNode = frag.appendChild(node);
+        }
+        range.insertNode(frag);
+        if (lastNode) {
+          range.setStartAfter(lastNode);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+        inserted = true;
+      }
+
+      if (!inserted) {
+        containerRef.current.insertAdjacentHTML('beforeend', htmlString);
+      }
+
+      onMarkDirty?.();
+      onUpdateHtml(containerRef.current.innerHTML);
+
+      setTimeout(() => {
+        bindImageHandlers();
+      }, 50);
+    },
+  }));
+
+  // Initialize or sync DOM only when html changes externally (initial load, image replace, undo/redo)
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+
+    if (containerRef.current.innerHTML !== html) {
+      containerRef.current.innerHTML = html;
+      lastLoadedHtmlRef.current = html;
+    }
+
+    bindImageHandlers();
 
     // Intercept internal section anchor clicks (<a href="#...">) for instant preview jumping
     const handleAnchorClick = (e: MouseEvent) => {

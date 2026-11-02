@@ -479,6 +479,7 @@ export default function App() {
                 selectedBlockId={selectedBlockId}
                 onSelectBlock={setSelectedBlockId}
                 onUpdateBlock={handleUpdateBlock}
+                onAddBlock={handleAddBlock}
                 onMoveBlock={handleMoveBlock}
                 onDuplicateBlock={handleDuplicateBlock}
                 onDeleteBlock={handleDeleteBlock}
