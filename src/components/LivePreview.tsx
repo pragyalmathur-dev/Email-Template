@@ -22,11 +22,18 @@ import { InsertSpacerModal } from './InsertSpacerModal';
 import { InsertImageModal } from './InsertImageModal';
 import { InsertCalloutModal } from './InsertCalloutModal';
 import { ImageResizeOverlay } from './ImageResizeOverlay';
+import { DeleteSectionModal } from './DeleteSectionModal';
 import {
   extractHtmlSections,
   scrollToSectionInContainer,
   DocumentSectionTarget,
 } from '../utils/sectionLinks';
+import {
+  detectDeletableSections,
+  removeSectionFromContainer,
+  deleteSectionByKeywordFromContainer,
+  DeletableSection,
+} from '../utils/sectionDeleter';
 
 export interface LivePreviewHandle {
   getLatestHtml: () => string | null;
@@ -86,6 +93,9 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isCalloutModalOpen, setIsCalloutModalOpen] = useState(false);
 
+  // Section Deletion State
+  const [isDeleteSectionModalOpen, setIsDeleteSectionModalOpen] = useState(false);
+
   React.useImperativeHandle(ref, () => ({
     getLatestHtml: () => {
       if (rawRendererRef.current) {
@@ -108,6 +118,70 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
       isExistingAnchor: true,
     }));
   }, [document.rawHtmlMode, document.rawHtmlContent, document.blocks]);
+
+  // Extract all deletable sections from raw HTML or block model (e.g. Sudoku game, Customer Delight)
+  const deletableSections = useMemo<DeletableSection[]>(() => {
+    if (document.rawHtmlMode && document.rawHtmlContent) {
+      return detectDeletableSections(document.rawHtmlContent);
+    }
+    return document.blocks.map((b, idx) => ({
+      id: b.id,
+      title: b.title || (b as any).headline || `Section ${idx + 1} (${b.type})`,
+      category: (b.type === 'header' ? 'banner' : b.type === 'footer' ? 'footer' : 'article') as any,
+      snippet: (b as any).description || (b as any).subtitle || b.type,
+      tag: 'block',
+      isBlockMode: true,
+      blockId: b.id,
+    }));
+  }, [document.rawHtmlMode, document.rawHtmlContent, document.blocks]);
+
+  const handleDeleteSection = useCallback(
+    (section: DeletableSection) => {
+      if (document.rawHtmlMode && rawRendererRef.current) {
+        const targetContainer =
+          (containerRef.current?.querySelector('.newsletter-body-container') as HTMLElement) ||
+          containerRef.current;
+        if (targetContainer) {
+          const removed = removeSectionFromContainer(targetContainer, section);
+          if (removed) {
+            onMarkDirty?.();
+            onUpdateRawHtml?.(rawRendererRef.current.getHtml());
+          }
+        }
+      } else if (section.blockId) {
+        const idx = document.blocks.findIndex((b) => b.id === section.blockId);
+        if (idx >= 0) {
+          onDeleteBlock(idx);
+          onMarkDirty?.();
+        }
+      }
+    },
+    [document.rawHtmlMode, document.blocks, onDeleteBlock, onMarkDirty, onUpdateRawHtml]
+  );
+
+  const handleDeleteSectionByKeyword = useCallback(
+    (keyword: string): boolean => {
+      if (document.rawHtmlMode && rawRendererRef.current) {
+        const targetContainer =
+          (containerRef.current?.querySelector('.newsletter-body-container') as HTMLElement) ||
+          containerRef.current;
+        if (targetContainer) {
+          const res = deleteSectionByKeywordFromContainer(targetContainer, keyword);
+          if (res.success) {
+            onMarkDirty?.();
+            onUpdateRawHtml?.(rawRendererRef.current.getHtml());
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    [document.rawHtmlMode, onMarkDirty, onUpdateRawHtml]
+  );
+
+  const handlePreviewSection = useCallback((section: DeletableSection) => {
+    scrollToSectionInContainer(containerRef.current, section.id || section.title);
+  }, []);
 
   // Selection management helpers
   const saveCurrentSelection = useCallback(() => {
@@ -284,8 +358,21 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
               saveCurrentSelection();
               setIsCalloutModalOpen(true);
             }}
+            onOpenDeleteSection={() => {
+              setIsDeleteSectionModalOpen(true);
+            }}
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setIsDeleteSectionModalOpen(true)}
+          title="Delete any section from the newsletter (e.g. Sudoku game, article, footer)"
+          className="flex items-center gap-1.5 px-3 py-2.5 bg-neutral-900 hover:bg-red-950/60 text-neutral-200 hover:text-red-300 border border-neutral-700 hover:border-red-500/50 font-bold text-xs rounded-xl shadow transition-colors shrink-0 cursor-pointer"
+        >
+          <Trash2 className="w-4 h-4 text-red-400" />
+          <span className="hidden sm:inline">Delete Section</span>
+          <span className="sm:hidden">Delete</span>
+        </button>
         {onOpenExportModal && (
           <button
             type="button"
@@ -479,6 +566,16 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
         isOpen={isCalloutModalOpen}
         onClose={() => setIsCalloutModalOpen(false)}
         onInsert={(calloutHtml) => handleInsertHtmlElement(calloutHtml, 'callout-block')}
+      />
+
+      {/* Delete a Section Modal */}
+      <DeleteSectionModal
+        isOpen={isDeleteSectionModalOpen}
+        onClose={() => setIsDeleteSectionModalOpen(false)}
+        sections={deletableSections}
+        onDeleteSection={handleDeleteSection}
+        onDeleteByKeyword={handleDeleteSectionByKeyword}
+        onPreviewSection={handlePreviewSection}
       />
     </div>
   );

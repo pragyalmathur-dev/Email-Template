@@ -5,6 +5,9 @@ import {
   AlignRight,
   UploadCloud,
   Scaling,
+  Move,
+  ArrowUp,
+  ArrowDown,
   Check,
   GripHorizontal,
   GripVertical,
@@ -15,6 +18,7 @@ import {
   X,
   ChevronDown as ChevronDownIcon,
   Sparkles,
+  Layers,
 } from 'lucide-react';
 
 export interface ImageResizeOverlayProps {
@@ -66,10 +70,12 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
 
   const [currentAlign, setCurrentAlign] = useState<'left' | 'center' | 'right'>('center');
   
-  // Show dropdown menu upon image click by default
+  // Show dropdown menu upon image click by default with 3 requested options
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(true);
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isDragMoveMode, setIsDragMoveMode] = useState<boolean>(false);
   const [showResizeHint, setShowResizeHint] = useState<boolean>(false);
+  const [dragFeedback, setDragFeedback] = useState<string | null>(null);
 
   // Measure and align overlay with target image in container space
   const updatePosition = useCallback(() => {
@@ -158,6 +164,97 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
     };
   }, [containerEl, imageEl, onDeselect, updatePosition]);
 
+  // ========================================================
+  // DOCUMENT DRAG & DROP LISTENER (To drop image anywhere in newsletter)
+  // ========================================================
+  useEffect(() => {
+    const handleContainerDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+
+      // Find drop target position using caretRangeFromPoint or caretPositionFromPoint
+      let range: Range | null = null;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      } else if ((document as unknown as { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } }).caretPositionFromPoint) {
+        const pos = (document as unknown as { caretPositionFromPoint: (x: number, y: number) => { offsetNode: Node; offset: number } }).caretPositionFromPoint(e.clientX, e.clientY);
+        if (pos) {
+          range = document.createRange();
+          range.setStart(pos.offsetNode, pos.offset);
+          range.collapse(true);
+        }
+      }
+
+      // Show drop indicator line
+      let indicator = document.getElementById('newsletter-drop-indicator');
+      if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'newsletter-drop-indicator';
+        indicator.style.height = '4px';
+        indicator.style.backgroundColor = '#f59e0b';
+        indicator.style.borderRadius = '2px';
+        indicator.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.8)';
+        indicator.style.pointerEvents = 'none';
+        indicator.style.margin = '6px 0';
+      }
+
+      if (range) {
+        try {
+          range.insertNode(indicator);
+        } catch {
+          // If range inside image or invalid node
+        }
+      }
+    };
+
+    const handleContainerDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const indicator = document.getElementById('newsletter-drop-indicator');
+      if (indicator && indicator.parentNode) {
+        // Find best element to move: imageEl or its wrapping block
+        const toMove =
+          imageEl.parentElement &&
+          imageEl.parentElement !== containerEl &&
+          imageEl.parentElement.children.length === 1 &&
+          ['P', 'DIV', 'CENTER'].includes(imageEl.parentElement.tagName)
+            ? imageEl.parentElement
+            : imageEl;
+
+        indicator.parentNode.insertBefore(toMove, indicator);
+        indicator.remove();
+
+        setDragFeedback('Image moved to new location!');
+        setTimeout(() => setDragFeedback(null), 2500);
+
+        setTimeout(() => {
+          updatePosition();
+          onUpdate();
+        }, 50);
+      }
+    };
+
+    const handleContainerDragLeave = (e: DragEvent) => {
+      if (!containerEl.contains(e.relatedTarget as Node)) {
+        const indicator = document.getElementById('newsletter-drop-indicator');
+        indicator?.remove();
+      }
+    };
+
+    containerEl.addEventListener('dragover', handleContainerDragOver);
+    containerEl.addEventListener('drop', handleContainerDrop);
+    containerEl.addEventListener('dragleave', handleContainerDragLeave);
+
+    return () => {
+      containerEl.removeEventListener('dragover', handleContainerDragOver);
+      containerEl.removeEventListener('drop', handleContainerDrop);
+      containerEl.removeEventListener('dragleave', handleContainerDragLeave);
+      const indicator = document.getElementById('newsletter-drop-indicator');
+      indicator?.remove();
+    };
+  }, [containerEl, imageEl, onUpdate, updatePosition]);
+
   // Apply width and height to DOM image
   const setDimensions = useCallback(
     (w: number, h?: number) => {
@@ -193,6 +290,41 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
   const nudgeHeight = (delta: number) => {
     const newH = Math.max(30, currentHeight + delta);
     setDimensions(currentWidth, newH);
+  };
+
+  // Move image UP or DOWN in DOM relative to surrounding blocks
+  const moveImageDirection = (direction: 'up' | 'down') => {
+    const toMove =
+      imageEl.parentElement &&
+      imageEl.parentElement !== containerEl &&
+      imageEl.parentElement.children.length === 1 &&
+      ['P', 'DIV', 'CENTER'].includes(imageEl.parentElement.tagName)
+        ? imageEl.parentElement
+        : imageEl;
+
+    if (direction === 'up') {
+      const prev = toMove.previousElementSibling;
+      if (prev && prev.parentNode) {
+        prev.parentNode.insertBefore(toMove, prev);
+        setDragFeedback('Moved image up one section');
+      } else {
+        setDragFeedback('Already at the top');
+      }
+    } else {
+      const next = toMove.nextElementSibling;
+      if (next && next.parentNode) {
+        next.parentNode.insertBefore(toMove, next.nextElementSibling);
+        setDragFeedback('Moved image down one section');
+      } else {
+        setDragFeedback('Already at the bottom');
+      }
+    }
+
+    setTimeout(() => setDragFeedback(null), 2000);
+    setTimeout(() => {
+      updatePosition();
+      onUpdate();
+    }, 50);
   };
 
   // Set Preset Width
@@ -249,7 +381,6 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
 
   // ========================================================
   // 4 CORNER RESIZE DRAG HANDLER (Top-Left, Top-Right, Bottom-Left, Bottom-Right)
-  // Proportional corner resizing: preserves photo aspect ratio
   // ========================================================
   const startCornerDrag = (corner: 'nw' | 'ne' | 'se' | 'sw') => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -269,16 +400,12 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
 
       let scaleDelta = 0;
       if (corner === 'se') {
-        // Dragging Bottom-Right
         scaleDelta = (deltaX + deltaY * aspectRatio) / 2;
       } else if (corner === 'sw') {
-        // Dragging Bottom-Left
         scaleDelta = (-deltaX + deltaY * aspectRatio) / 2;
       } else if (corner === 'ne') {
-        // Dragging Top-Right
         scaleDelta = (deltaX + (-deltaY) * aspectRatio) / 2;
       } else if (corner === 'nw') {
-        // Dragging Top-Left
         scaleDelta = (-deltaX + (-deltaY) * aspectRatio) / 2;
       }
 
@@ -408,10 +535,9 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Determine cleanest placement for the dropdown menu
-  // If the image is large, center it directly over the image. If small, place right below or above.
+  // Cleanest placement for the dropdown menu
   const dropdownClass =
-    rect.height >= 160
+    rect.height >= 180
       ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'
       : rect.top < 150
       ? 'top-full mt-2 left-1/2 -translate-x-1/2'
@@ -431,9 +557,44 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
       {/* Visual Bounding Box Glow */}
       <div
         className={`absolute inset-0 rounded pointer-events-none transition-colors ${
-          isDragging ? 'bg-amber-500/25 ring-2 ring-amber-400' : 'bg-amber-500/10'
+          isDragMoveMode
+            ? 'bg-amber-500/30 ring-4 ring-amber-400'
+            : isDragging
+            ? 'bg-amber-500/25 ring-2 ring-amber-400'
+            : 'bg-amber-500/10'
         }`}
       />
+
+      {/* ======================================================== */}
+      {/* CENTRAL DRAG & MOVE HANDLE (VISIBLE IN DRAG MODE)        */}
+      {/* ======================================================== */}
+      {isDragMoveMode && (
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/plain', 'image-move');
+            e.dataTransfer.effectAllowed = 'move';
+            imageEl.classList.add('opacity-40');
+          }}
+          onDragEnd={() => {
+            imageEl.classList.remove('opacity-40');
+            updatePosition();
+            onUpdate();
+          }}
+          title="Click and drag to drop this image anywhere in text or tables"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-grab active:cursor-grabbing bg-amber-400 hover:bg-amber-300 text-neutral-950 font-extrabold px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2 border-2 border-neutral-950 ring-4 ring-amber-500/50 hover:scale-105 transition-transform z-50 select-none animate-in zoom-in-95 duration-150"
+        >
+          <Move className="w-5 h-5 stroke-[2.8]" />
+          <span className="text-xs tracking-wider uppercase">Drag Image Anywhere</span>
+        </div>
+      )}
+
+      {/* Feedback toast */}
+      {dragFeedback && (
+        <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 pointer-events-auto bg-neutral-900 border border-amber-500/80 text-amber-300 text-xs px-3 py-1 rounded-full shadow-2xl font-semibold whitespace-nowrap z-50 animate-in fade-in duration-150">
+          {dragFeedback}
+        </div>
+      )}
 
       {/* ======================================================== */}
       {/* 4 HIGH-VISIBILITY CORNER RESIZE HANDLES (ALWAYS VISIBLE) */}
@@ -481,11 +642,11 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
 
       {/* ======================================================== */}
       {/* DROPDOWN MENU: Appears on image click                     */}
-      {/* Contains: 1) Upload the image  2) Resize the image       */}
+      {/* Contains: 1) Upload  2) Resize  3) Drag the image        */}
       {/* ======================================================== */}
       {isDropdownOpen && (
         <div
-          className={`absolute ${dropdownClass} pointer-events-auto z-50 w-76 max-w-[90vw] bg-neutral-950/98 border-2 border-amber-500 rounded-2xl shadow-2xl p-3.5 text-neutral-100 backdrop-blur-xl animate-in zoom-in-95 duration-150`}
+          className={`absolute ${dropdownClass} pointer-events-auto z-50 w-80 max-w-[92vw] bg-neutral-950/98 border-2 border-amber-500 rounded-2xl shadow-2xl p-3.5 text-neutral-100 backdrop-blur-xl animate-in zoom-in-95 duration-150`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -510,7 +671,7 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
             </button>
           </div>
 
-          {/* The 2 Primary Options Requested */}
+          {/* The 3 Primary Options Requested by User */}
           <div className="space-y-2">
             {/* 1. Upload the image */}
             <button
@@ -519,7 +680,7 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
                 setIsDropdownOpen(false);
                 onReplace();
               }}
-              className="w-full flex items-center gap-3 p-3 rounded-xl bg-neutral-900 hover:bg-amber-500/20 border border-neutral-700/80 hover:border-amber-400 text-left transition-all group cursor-pointer shadow-sm"
+              className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-neutral-900 hover:bg-amber-500/20 border border-neutral-700/80 hover:border-amber-400 text-left transition-all group cursor-pointer shadow-sm"
             >
               <div className="p-2.5 rounded-lg bg-amber-400 text-neutral-950 group-hover:scale-105 transition-transform shrink-0 shadow">
                 <UploadCloud className="w-5 h-5 stroke-[2.4]" />
@@ -528,11 +689,11 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
                 <div className="text-xs font-bold text-neutral-100 group-hover:text-amber-300 flex items-center justify-between">
                   <span>Upload the image</span>
                   <span className="text-[10px] text-amber-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
-                    Choose &rarr;
+                    Pick &rarr;
                   </span>
                 </div>
                 <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
-                  Pick image from computer or enter URL
+                  Choose file from device or enter image URL
                 </div>
               </div>
             </button>
@@ -542,9 +703,10 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
               type="button"
               onClick={() => {
                 setIsDropdownOpen(false);
+                setIsDragMoveMode(false);
                 setShowResizeHint(true);
               }}
-              className="w-full flex items-center gap-3 p-3 rounded-xl bg-neutral-900 hover:bg-amber-500/20 border border-neutral-700/80 hover:border-amber-400 text-left transition-all group cursor-pointer shadow-sm"
+              className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-neutral-900 hover:bg-amber-500/20 border border-neutral-700/80 hover:border-amber-400 text-left transition-all group cursor-pointer shadow-sm"
             >
               <div className="p-2.5 rounded-lg bg-amber-400/20 text-amber-400 group-hover:bg-amber-400 group-hover:text-neutral-950 transition-colors shrink-0">
                 <Scaling className="w-5 h-5 stroke-[2.4]" />
@@ -553,11 +715,37 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
                 <div className="text-xs font-bold text-neutral-100 group-hover:text-amber-300 flex items-center justify-between">
                   <span>Resize the image</span>
                   <span className="text-[10px] text-amber-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
-                    Active &rarr;
+                    Handles &rarr;
                   </span>
                 </div>
                 <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
                   Drag 4 corners or sides, presets & align
+                </div>
+              </div>
+            </button>
+
+            {/* 3. Drag the image (NEW) */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsDropdownOpen(false);
+                setIsDragMoveMode(true);
+                setShowResizeHint(false);
+              }}
+              className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-neutral-900 hover:bg-amber-500/20 border border-neutral-700/80 hover:border-amber-400 text-left transition-all group cursor-pointer shadow-sm"
+            >
+              <div className="p-2.5 rounded-lg bg-amber-400/20 text-amber-400 group-hover:bg-amber-400 group-hover:text-neutral-950 transition-colors shrink-0">
+                <Move className="w-5 h-5 stroke-[2.4]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-neutral-100 group-hover:text-amber-300 flex items-center justify-between">
+                  <span>Drag the image</span>
+                  <span className="text-[10px] text-amber-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                    Move &rarr;
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                  Drag & drop anywhere in newsletter, or move up/down
                 </div>
               </div>
             </button>
@@ -580,13 +768,46 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
       )}
 
       {/* Resize Hint banner when dropdown closes */}
-      {showResizeHint && !isDropdownOpen && (
+      {showResizeHint && !isDropdownOpen && !isDragMoveMode && (
         <div className="absolute -top-7 left-1/2 -translate-x-1/2 pointer-events-auto bg-amber-400 text-neutral-950 font-bold text-[11px] px-2.5 py-0.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in duration-200 whitespace-nowrap z-50">
           <span>&larr; Drag any of the 4 white corners to resize &rarr;</span>
           <button
             type="button"
             onClick={() => setShowResizeHint(false)}
-            className="text-neutral-900 hover:text-black"
+            className="text-neutral-900 hover:text-black cursor-pointer"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* Drag Move Active Hint bar */}
+      {isDragMoveMode && (
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 pointer-events-auto flex items-center gap-1.5 bg-neutral-950/95 border border-amber-500 rounded-full px-3 py-1 shadow-2xl text-[11px] font-bold text-amber-300 z-50 whitespace-nowrap">
+          <Move className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+          <span>Drag Handle Active: Grab handle and drop anywhere!</span>
+          <div className="h-3 w-px bg-neutral-700 mx-1" />
+          <button
+            type="button"
+            onClick={() => moveImageDirection('up')}
+            title="Move Image Up"
+            className="p-0.5 hover:bg-neutral-800 rounded text-neutral-200 hover:text-amber-400 cursor-pointer"
+          >
+            <ArrowUp className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => moveImageDirection('down')}
+            title="Move Image Down"
+            className="p-0.5 hover:bg-neutral-800 rounded text-neutral-200 hover:text-amber-400 cursor-pointer"
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsDragMoveMode(false)}
+            className="ml-1 text-neutral-400 hover:text-white cursor-pointer"
+            title="Close drag mode"
           >
             &times;
           </button>
@@ -605,16 +826,54 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
         <button
           type="button"
           onClick={() => setIsDropdownOpen((prev) => !prev)}
-          title="Open Image Options Dropdown (Upload or Resize)"
+          title="Open Image Options Dropdown (Upload, Resize, or Drag)"
           className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
             isDropdownOpen
               ? 'bg-amber-400 text-neutral-950 border-amber-400 font-bold shadow'
               : 'bg-neutral-900 border-neutral-700 text-amber-300 hover:bg-neutral-800'
           }`}
         >
-          <span>Options</span>
+          <span>Options (3)</span>
           <ChevronDownIcon className="w-3.5 h-3.5" />
         </button>
+
+        {/* Drag/Move Direct Toggle Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setIsDragMoveMode((prev) => !prev);
+            setIsDropdownOpen(false);
+          }}
+          title="Toggle Drag & Move Anywhere Mode"
+          className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+            isDragMoveMode
+              ? 'bg-amber-400 text-neutral-950 border-amber-400 font-bold shadow'
+              : 'bg-neutral-900 border-neutral-800 text-neutral-200 hover:bg-amber-500/20 hover:text-amber-300'
+          }`}
+        >
+          <Move className="w-3.5 h-3.5 text-amber-400" />
+          <span>Drag</span>
+        </button>
+
+        {/* Quick Shift Up / Down */}
+        <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
+          <button
+            type="button"
+            onClick={() => moveImageDirection('up')}
+            title="Move Image Up one section"
+            className="p-1 hover:bg-neutral-800 rounded text-neutral-300 hover:text-amber-400 cursor-pointer"
+          >
+            <ArrowUp className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => moveImageDirection('down')}
+            title="Move Image Down one section"
+            className="p-1 hover:bg-neutral-800 rounded text-neutral-300 hover:text-amber-400 cursor-pointer"
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
         {/* Upload Direct Button */}
         <button

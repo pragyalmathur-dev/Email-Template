@@ -20,6 +20,7 @@ import {
   Image as ImageIcon,
   Space,
   MessageSquareQuote,
+  Trash2,
 } from 'lucide-react';
 import { DocumentSectionTarget } from '../utils/sectionLinks';
 
@@ -34,6 +35,7 @@ export interface TextFormatToolbarProps {
   onOpenInsertImage?: () => void;
   onOpenInsertSpacer?: () => void;
   onOpenInsertCallout?: () => void;
+  onOpenDeleteSection?: () => void;
 }
 
 export const TextFormatToolbar: React.FC<TextFormatToolbarProps> = ({
@@ -46,6 +48,7 @@ export const TextFormatToolbar: React.FC<TextFormatToolbarProps> = ({
   onOpenInsertImage,
   onOpenInsertSpacer,
   onOpenInsertCallout,
+  onOpenDeleteSection,
 }) => {
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
@@ -451,6 +454,21 @@ export const TextFormatToolbar: React.FC<TextFormatToolbarProps> = ({
         >
           <RemoveFormatting className="w-3.5 h-3.5" />
         </button>
+
+        {onOpenDeleteSection && (
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onOpenDeleteSection();
+            }}
+            title="Delete a section (e.g. Sudoku game, article, etc.)"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-red-500/10 hover:bg-red-500/25 text-red-300 border border-red-500/30 transition-colors ml-1 font-semibold"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+            <span className="text-[11px] hidden sm:inline">Delete Section</span>
+          </button>
+        )}
       </div>
     </div>
   );
