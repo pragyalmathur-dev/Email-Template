@@ -10,6 +10,7 @@ import {
   Calendar,
   ExternalLink,
   Download,
+  PlusCircle,
 } from 'lucide-react';
 import { DetectedImage, NewsletterBlock, NewsletterDocument, BlockType } from '../types/newsletter';
 import { createDefaultBlock } from './BlockPalette';
@@ -23,6 +24,7 @@ import { InsertImageModal } from './InsertImageModal';
 import { InsertCalloutModal } from './InsertCalloutModal';
 import { ImageResizeOverlay } from './ImageResizeOverlay';
 import { DeleteSectionModal } from './DeleteSectionModal';
+import { AddSectionModal } from './AddSectionModal';
 import {
   extractHtmlSections,
   scrollToSectionInContainer,
@@ -77,6 +79,7 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
   const rawRendererRef = useRef<{
     getHtml: () => string;
     insertHtmlAtCursor: (html: string) => void;
+    insertHtmlAtPosition: (html: string, position: 'cursor' | 'top' | 'bottom') => void;
   }>(null);
   const savedRangeRef = useRef<Range | null>(null);
 
@@ -93,7 +96,8 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isCalloutModalOpen, setIsCalloutModalOpen] = useState(false);
 
-  // Section Deletion State
+  // Section Insertion & Deletion State
+  const [isAddSectionModalOpen, setIsAddSectionModalOpen] = useState(false);
   const [isDeleteSectionModalOpen, setIsDeleteSectionModalOpen] = useState(false);
 
   React.useImperativeHandle(ref, () => ({
@@ -322,6 +326,26 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
     [document.rawHtmlMode, onAddBlock, onMarkDirty, restoreSavedSelection]
   );
 
+  const handleInsertSection = useCallback(
+    (htmlContent: string, position: 'cursor' | 'top' | 'bottom') => {
+      if (document.rawHtmlMode && rawRendererRef.current) {
+        if (position === 'cursor') {
+          restoreSavedSelection();
+        }
+        rawRendererRef.current.insertHtmlAtPosition(htmlContent, position);
+      } else if (onAddBlock) {
+        const newBlock: NewsletterBlock = {
+          id: `section-${Date.now()}`,
+          type: 'custom-html',
+          htmlContent,
+        };
+        onAddBlock(newBlock);
+      }
+      onMarkDirty?.();
+    },
+    [document.rawHtmlMode, onAddBlock, onMarkDirty, restoreSavedSelection]
+  );
+
   const maxWidthClass =
     viewport === 'mobile'
       ? 'w-[375px]'
@@ -334,7 +358,7 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
       className="flex-1 overflow-y-scroll overflow-x-hidden min-h-0 h-full w-full p-4 md:p-8 flex flex-col items-center bg-neutral-900/80 text-neutral-100"
       style={{ overflowY: 'scroll', WebkitOverflowScrolling: 'touch', minHeight: 0 }}
     >
-      {/* Sticky Rich Text Formatting & Hyperlink Bar (Word-style: Bold, Italics, Underline, Link) */}
+      {/* Sticky Rich Text Formatting & Hyperlink Bar (Word-style: Bold, Italics, Underline, Link, Font size, Highlighting) */}
       <div className={`${maxWidthClass} sticky top-0 z-30 mb-3 shadow-md flex items-center gap-2`}>
         <div className="flex-1 min-w-0">
           <TextFormatToolbar
@@ -342,6 +366,10 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
             onAddSectionAnchor={handleOpenAnchorModal}
             availableSections={availableSections}
             onTestJump={handleTestJump}
+            onOpenAddSection={() => {
+              saveCurrentSelection();
+              setIsAddSectionModalOpen(true);
+            }}
             onOpenInsertButton={() => {
               saveCurrentSelection();
               setIsButtonModalOpen(true);
@@ -363,6 +391,19 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
             }}
           />
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            saveCurrentSelection();
+            setIsAddSectionModalOpen(true);
+          }}
+          title="Add a new pre-designed section (Sudoku Game, Feature Story, 2-Column, Cards, Banners, etc.)"
+          className="flex items-center gap-1.5 px-3 py-2.5 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs rounded-xl shadow-md transition-all hover:scale-102 shrink-0 cursor-pointer"
+        >
+          <PlusCircle className="w-4 h-4 stroke-[2.5]" />
+          <span className="hidden sm:inline">+ Add Section</span>
+          <span className="sm:hidden">+ Section</span>
+        </button>
         <button
           type="button"
           onClick={() => setIsDeleteSectionModalOpen(true)}
@@ -566,6 +607,13 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
         isOpen={isCalloutModalOpen}
         onClose={() => setIsCalloutModalOpen(false)}
         onInsert={(calloutHtml) => handleInsertHtmlElement(calloutHtml, 'callout-block')}
+      />
+
+      {/* Add a Section Modal (Brevo / Mailchimp templates) */}
+      <AddSectionModal
+        isOpen={isAddSectionModalOpen}
+        onClose={() => setIsAddSectionModalOpen(false)}
+        onInsertSection={handleInsertSection}
       />
 
       {/* Delete a Section Modal */}
@@ -1531,6 +1579,51 @@ const RawHtmlRenderer = React.forwardRef<
 
       if (!inserted) {
         containerRef.current.insertAdjacentHTML('beforeend', htmlString);
+      }
+
+      onMarkDirty?.();
+      onUpdateHtml(containerRef.current.innerHTML);
+
+      setTimeout(() => {
+        bindImageHandlers();
+      }, 50);
+    },
+    insertHtmlAtPosition: (htmlString: string, position: 'cursor' | 'top' | 'bottom') => {
+      if (!containerRef.current) return;
+      containerRef.current.focus();
+
+      if (position === 'top') {
+        containerRef.current.insertAdjacentHTML('afterbegin', htmlString);
+      } else if (position === 'bottom') {
+        containerRef.current.insertAdjacentHTML('beforeend', htmlString);
+      } else {
+        const sel = window.getSelection();
+        let inserted = false;
+        if (sel && sel.rangeCount > 0 && containerRef.current.contains(sel.anchorNode)) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = htmlString;
+          const frag = document.createDocumentFragment();
+          let node: Node | null;
+          let lastNode: Node | null = null;
+          while ((node = tempDiv.firstChild)) {
+            lastNode = frag.appendChild(node);
+          }
+          range.insertNode(frag);
+          if (lastNode) {
+            range.setStartAfter(lastNode);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          inserted = true;
+        }
+
+        if (!inserted) {
+          containerRef.current.insertAdjacentHTML('beforeend', htmlString);
+        }
       }
 
       onMarkDirty?.();

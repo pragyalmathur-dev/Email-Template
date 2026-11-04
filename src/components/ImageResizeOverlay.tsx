@@ -19,6 +19,7 @@ import {
   ChevronDown as ChevronDownIcon,
   Sparkles,
   Layers,
+  Trash2,
 } from 'lucide-react';
 
 export interface ImageResizeOverlayProps {
@@ -325,6 +326,18 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
       updatePosition();
       onUpdate();
     }, 50);
+  };
+
+  // Remove / Delete this image from the document
+  const handleDeleteImage = () => {
+    const parent = imageEl.parentElement;
+    imageEl.remove();
+    // Clean up empty wrapping p or div if it only held this image
+    if (parent && parent !== containerEl && parent.children.length === 0 && !parent.textContent?.trim()) {
+      parent.remove();
+    }
+    onDeselect();
+    onUpdate();
   };
 
   // Set Preset Width
@@ -749,6 +762,31 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
                 </div>
               </div>
             </button>
+
+            {/* 4. Delete / Remove image */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsDropdownOpen(false);
+                handleDeleteImage();
+              }}
+              className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-neutral-900 hover:bg-red-500/20 border border-neutral-700/80 hover:border-red-500/80 text-left transition-all group cursor-pointer shadow-sm"
+            >
+              <div className="p-2.5 rounded-lg bg-red-500/20 text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors shrink-0">
+                <Trash2 className="w-5 h-5 stroke-[2.4]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-neutral-100 group-hover:text-red-300 flex items-center justify-between">
+                  <span>Remove / Delete image</span>
+                  <span className="text-[10px] text-red-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                    Delete &times;
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                  Completely remove this picture from newsletter
+                </div>
+              </div>
+            </button>
           </div>
 
           {/* Footer info badge */}
@@ -826,14 +864,14 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
         <button
           type="button"
           onClick={() => setIsDropdownOpen((prev) => !prev)}
-          title="Open Image Options Dropdown (Upload, Resize, or Drag)"
+          title="Open Image Options Dropdown (Upload, Resize, Drag, or Delete)"
           className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
             isDropdownOpen
               ? 'bg-amber-400 text-neutral-950 border-amber-400 font-bold shadow'
               : 'bg-neutral-900 border-neutral-700 text-amber-300 hover:bg-neutral-800'
           }`}
         >
-          <span>Options (3)</span>
+          <span>Options (4)</span>
           <ChevronDownIcon className="w-3.5 h-3.5" />
         </button>
 
@@ -967,11 +1005,21 @@ export const ImageResizeOverlay: React.FC<ImageResizeOverlayProps> = ({
           {currentWidth} × {currentHeight}px
         </div>
 
+        {/* Delete Image Button */}
+        <button
+          type="button"
+          onClick={handleDeleteImage}
+          title="Delete / Remove this image from the newsletter"
+          className="p-1 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+
         {/* Done / Deselect Button */}
         <button
           type="button"
           onClick={onDeselect}
-          title="Done resizing (Close handles)"
+          title="Done editing (Close handles)"
           className="p-1 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors cursor-pointer"
         >
           <Check className="w-4 h-4 text-emerald-400" />
