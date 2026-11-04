@@ -325,14 +325,15 @@ export default function App() {
     updateDocWithHistory({ ...doc, metadata: newMetadata, updatedAt: new Date().toISOString() }, false);
   };
 
-  // Image Replacement Handler
+  // Image Replacement Handler (supports replacement url, alt, and alignment)
   const handleSaveImageReplacement = (
     targetImage: DetectedImage,
     newUrl: string,
-    newAlt?: string
+    newAlt?: string,
+    newAlign?: 'left' | 'center' | 'right'
   ) => {
     if (!doc) return;
-    const updated = updateDocumentImage(doc, targetImage, newUrl, newAlt);
+    const updated = updateDocumentImage(doc, targetImage, newUrl, newAlt, newAlign);
     updateDocWithHistory(updated, true);
   };
 
@@ -485,6 +486,7 @@ export default function App() {
                 onDeleteBlock={handleDeleteBlock}
                 onOpenImageReplacer={(img) => setTargetImageToReplace(img)}
                 viewport={viewport}
+                onOpenExportModal={() => setIsExportModalOpen(true)}
                 onMarkDirty={() => setIsDirty(true)}
                 onUpdateRawHtml={(newHtml) => {
                   updateDocWithHistory(

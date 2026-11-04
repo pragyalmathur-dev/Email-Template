@@ -8,6 +8,9 @@ import {
   Image as ImageIcon,
   ExternalLink,
   Bookmark,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from 'lucide-react';
 import { PRESET_IMAGES } from '../utils/svgAssets';
 import { DocumentSectionTarget } from '../utils/sectionLinks';
@@ -335,24 +338,52 @@ export const InsertImageModal: React.FC<InsertImageModalProps> = ({
                   </div>
                 </div>
 
-                {/* Alignment */}
+                {/* Image Alignment Buttons */}
                 <div>
-                  <label className="block text-xs font-medium text-neutral-300 mb-1">Align</label>
-                  <div className="flex rounded-lg border border-neutral-800 bg-neutral-950 p-0.5">
-                    {(['left', 'center', 'right'] as const).map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        onClick={() => setAlign(a)}
-                        className={`flex-1 py-1 text-[11px] capitalize rounded font-medium ${
-                          align === a
-                            ? 'bg-amber-500 text-neutral-950 font-bold'
-                            : 'text-neutral-400 hover:text-neutral-200'
-                        }`}
-                      >
-                        {a}
-                      </button>
-                    ))}
+                  <label className="block text-xs font-semibold text-neutral-200 mb-1 flex items-center justify-between">
+                    <span>Alignment</span>
+                    <span className="text-[10px] text-amber-400 capitalize">{align}</span>
+                  </label>
+                  <div className="flex rounded-lg border border-neutral-800 bg-neutral-950 p-1 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setAlign('left')}
+                      className={`flex-1 py-1.5 px-1.5 flex items-center justify-center gap-1 text-xs rounded-md transition-all font-medium ${
+                        align === 'left'
+                          ? 'bg-amber-400 text-neutral-950 font-bold shadow-sm'
+                          : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                      }`}
+                      title="Align Left"
+                    >
+                      <AlignLeft className="w-3.5 h-3.5" />
+                      <span>Left</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAlign('center')}
+                      className={`flex-1 py-1.5 px-1.5 flex items-center justify-center gap-1 text-xs rounded-md transition-all font-medium ${
+                        align === 'center'
+                          ? 'bg-amber-400 text-neutral-950 font-bold shadow-sm'
+                          : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                      }`}
+                      title="Align Center"
+                    >
+                      <AlignCenter className="w-3.5 h-3.5" />
+                      <span>Center</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAlign('right')}
+                      className={`flex-1 py-1.5 px-1.5 flex items-center justify-center gap-1 text-xs rounded-md transition-all font-medium ${
+                        align === 'right'
+                          ? 'bg-amber-400 text-neutral-950 font-bold shadow-sm'
+                          : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                      }`}
+                      title="Align Right"
+                    >
+                      <AlignRight className="w-3.5 h-3.5" />
+                      <span>Right</span>
+                    </button>
                   </div>
                 </div>
 

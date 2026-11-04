@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Calendar,
   ExternalLink,
+  Download,
 } from 'lucide-react';
 import { DetectedImage, NewsletterBlock, NewsletterDocument, BlockType } from '../types/newsletter';
 import { createDefaultBlock } from './BlockPalette';
@@ -20,6 +21,7 @@ import { InsertButtonModal } from './InsertButtonModal';
 import { InsertSpacerModal } from './InsertSpacerModal';
 import { InsertImageModal } from './InsertImageModal';
 import { InsertCalloutModal } from './InsertCalloutModal';
+import { ImageResizeOverlay } from './ImageResizeOverlay';
 import {
   extractHtmlSections,
   scrollToSectionInContainer,
@@ -43,6 +45,7 @@ interface LivePreviewProps {
   viewport: ViewportMode;
   onUpdateRawHtml?: (newHtml: string) => void;
   onMarkDirty?: () => void;
+  onOpenExportModal?: () => void;
 }
 
 export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>((
@@ -59,6 +62,7 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
     viewport,
     onUpdateRawHtml,
     onMarkDirty,
+    onOpenExportModal,
   },
   ref
 ) => {
@@ -257,29 +261,43 @@ export const LivePreview = React.forwardRef<LivePreviewHandle, LivePreviewProps>
       style={{ overflowY: 'scroll', WebkitOverflowScrolling: 'touch', minHeight: 0 }}
     >
       {/* Sticky Rich Text Formatting & Hyperlink Bar (Word-style: Bold, Italics, Underline, Link) */}
-      <div className={`${maxWidthClass} sticky top-0 z-30 mb-3 shadow-md`}>
-        <TextFormatToolbar
-          onOpenLinkModal={handleOpenLinkModal}
-          onAddSectionAnchor={handleOpenAnchorModal}
-          availableSections={availableSections}
-          onTestJump={handleTestJump}
-          onOpenInsertButton={() => {
-            saveCurrentSelection();
-            setIsButtonModalOpen(true);
-          }}
-          onOpenInsertImage={() => {
-            saveCurrentSelection();
-            setIsImageModalOpen(true);
-          }}
-          onOpenInsertSpacer={() => {
-            saveCurrentSelection();
-            setIsSpacerModalOpen(true);
-          }}
-          onOpenInsertCallout={() => {
-            saveCurrentSelection();
-            setIsCalloutModalOpen(true);
-          }}
-        />
+      <div className={`${maxWidthClass} sticky top-0 z-30 mb-3 shadow-md flex items-center gap-2`}>
+        <div className="flex-1 min-w-0">
+          <TextFormatToolbar
+            onOpenLinkModal={handleOpenLinkModal}
+            onAddSectionAnchor={handleOpenAnchorModal}
+            availableSections={availableSections}
+            onTestJump={handleTestJump}
+            onOpenInsertButton={() => {
+              saveCurrentSelection();
+              setIsButtonModalOpen(true);
+            }}
+            onOpenInsertImage={() => {
+              saveCurrentSelection();
+              setIsImageModalOpen(true);
+            }}
+            onOpenInsertSpacer={() => {
+              saveCurrentSelection();
+              setIsSpacerModalOpen(true);
+            }}
+            onOpenInsertCallout={() => {
+              saveCurrentSelection();
+              setIsCalloutModalOpen(true);
+            }}
+          />
+        </div>
+        {onOpenExportModal && (
+          <button
+            type="button"
+            onClick={onOpenExportModal}
+            title="Export Newsletter as Clean Standalone HTML"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs rounded-xl shadow-lg transition-transform hover:scale-102 shrink-0 border border-amber-300 cursor-pointer"
+          >
+            <Download className="w-4 h-4 stroke-[2.5]" />
+            <span className="hidden sm:inline">Export HTML</span>
+            <span className="sm:hidden">Export</span>
+          </button>
+        )}
       </div>
 
       {/* Email Client Simulated Envelope Box */}
@@ -1308,6 +1326,30 @@ const RawHtmlRenderer = React.forwardRef<
 >(({ html, onUpdateHtml, onOpenImageReplacer, onMarkDirty, onOpenLinkModal }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastLoadedHtmlRef = useRef<string>('');
+  const [selectedImageEl, setSelectedImageEl] = useState<HTMLImageElement | null>(null);
+  const [selectedImageIdx, setSelectedImageIdx] = useState<number>(-1);
+  const selectedImageRef = useRef<HTMLImageElement | null>(null);
+  selectedImageRef.current = selectedImageEl;
+
+  const selectImage = useCallback((img: HTMLImageElement, idx: number) => {
+    if (containerRef.current) {
+      const allImgs = containerRef.current.querySelectorAll('img');
+      allImgs.forEach((other) => {
+        if (other !== img) other.style.outline = 'none';
+      });
+    }
+    img.style.outline = '3px solid #f59e0b';
+    setSelectedImageEl(img);
+    setSelectedImageIdx(idx);
+  }, []);
+
+  const deselectImage = useCallback(() => {
+    if (selectedImageRef.current) {
+      selectedImageRef.current.style.outline = 'none';
+    }
+    setSelectedImageEl(null);
+    setSelectedImageIdx(-1);
+  }, []);
 
   const bindImageHandlers = useCallback(() => {
     if (!containerRef.current) return;
@@ -1315,16 +1357,34 @@ const RawHtmlRenderer = React.forwardRef<
     images.forEach((img, idx) => {
       img.style.cursor = 'pointer';
       img.style.transition = 'outline 0.15s ease';
-      img.title = 'Click to replace this image (Upload, URL, or Presets)';
+      img.draggable = false;
+      img.title = 'Click to open Image Options: Upload image or Resize with 4 corners';
 
       img.onmouseenter = () => {
-        img.style.outline = '3px solid #f59e0b';
+        if (img !== selectedImageRef.current) {
+          img.style.outline = '2px dashed #f59e0b';
+        }
       };
       img.onmouseleave = () => {
-        img.style.outline = 'none';
+        if (img !== selectedImageRef.current) {
+          img.style.outline = 'none';
+        }
+      };
+
+      // Mousedown & click select image immediately
+      img.onmousedown = (e) => {
+        e.stopPropagation();
+        selectImage(img, idx);
       };
 
       img.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        selectImage(img, idx);
+      };
+
+      // Double-click opens replace modal directly
+      img.ondblclick = (e) => {
         e.stopPropagation();
         onOpenImageReplacer({
           id: `raw-img-${idx}`,
@@ -1338,7 +1398,7 @@ const RawHtmlRenderer = React.forwardRef<
         });
       };
     });
-  }, [onOpenImageReplacer]);
+  }, [onOpenImageReplacer, selectImage]);
 
   React.useImperativeHandle(ref, () => ({
     getHtml: () => {
@@ -1389,12 +1449,29 @@ const RawHtmlRenderer = React.forwardRef<
   React.useEffect(() => {
     if (!containerRef.current) return;
 
-    if (containerRef.current.innerHTML !== html) {
+    if (lastLoadedHtmlRef.current !== html) {
       containerRef.current.innerHTML = html;
       lastLoadedHtmlRef.current = html;
+      deselectImage();
     }
 
     bindImageHandlers();
+
+    // Event delegation on container for image clicks
+    const handleContainerImageClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && target.tagName === 'IMG') {
+        const img = target as HTMLImageElement;
+        e.stopPropagation();
+        const allImgs = Array.from(containerRef.current?.querySelectorAll('img') || []);
+        const idx = allImgs.indexOf(img);
+        selectImage(img, idx >= 0 ? idx : 0);
+      }
+    };
+
+    const containerEl = containerRef.current;
+    containerEl.addEventListener('click', handleContainerImageClick, true);
+    containerEl.addEventListener('mousedown', handleContainerImageClick, true);
 
     // Intercept internal section anchor clicks (<a href="#...">) for instant preview jumping
     const handleAnchorClick = (e: MouseEvent) => {
@@ -1407,8 +1484,6 @@ const RawHtmlRenderer = React.forwardRef<
         }
       }
     };
-
-    const containerEl = containerRef.current;
     containerEl.addEventListener('click', handleAnchorClick);
 
     // Ctrl+K shortcut inside editor to trigger hyperlink dialog
@@ -1422,16 +1497,18 @@ const RawHtmlRenderer = React.forwardRef<
     containerEl.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      containerEl.removeEventListener('click', handleContainerImageClick, true);
+      containerEl.removeEventListener('mousedown', handleContainerImageClick, true);
       containerEl.removeEventListener('click', handleAnchorClick);
       containerEl.removeEventListener('keydown', handleKeyDown);
     };
-  }, [html, onOpenImageReplacer, onOpenLinkModal]);
+  }, [html, bindImageHandlers, deselectImage, onOpenLinkModal, selectImage]);
 
   return (
     <div className="p-2 relative group/raw w-full overflow-visible">
       <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs px-3.5 py-2 rounded-lg mb-3 flex items-center justify-between">
         <span className="font-medium">
-          Uploaded HTML Mode Active: Click any text to type, edit, add, or delete. Select text for Bold, Italic, Underline & Hyperlinks.
+          Uploaded HTML Mode: Click any text to edit inline. Click any image for <strong>Upload</strong> and <strong>4-Corner Resize</strong> options.
         </span>
         <span className="text-[11px] text-amber-400 font-medium">Click "Save Changes" (Ctrl+S) when done</span>
       </div>
@@ -1449,6 +1526,38 @@ const RawHtmlRenderer = React.forwardRef<
         className="outline-none focus:ring-1 focus:ring-amber-500/40 rounded min-h-[500px] w-full overflow-visible newsletter-body-container"
         style={{ overflow: 'visible', height: 'auto' }}
       />
+
+      {/* 4-Corner & 4-Side Image Resize, Options Dropdown, and Alignment Overlay */}
+      {selectedImageEl && containerRef.current && (
+        <ImageResizeOverlay
+          key={`img-overlay-${selectedImageIdx}-${selectedImageEl.getAttribute('src') || ''}`}
+          imageEl={selectedImageEl}
+          containerEl={containerRef.current}
+          onUpdate={() => {
+            onMarkDirty?.();
+            if (containerRef.current) {
+              onUpdateHtml(containerRef.current.innerHTML);
+            }
+          }}
+          onReplace={() => {
+            const idx = selectedImageIdx >= 0 ? selectedImageIdx : 0;
+            onOpenImageReplacer({
+              id: `raw-img-${idx}`,
+              blockId: 'raw-html',
+              blockTitle: `Newsletter Image #${idx + 1}`,
+              blockType: 'raw-image',
+              fieldKey: `img-index-${idx}`,
+              index: idx,
+              url: selectedImageEl.getAttribute('src') || '',
+              alt: selectedImageEl.getAttribute('alt') || '',
+            });
+          }}
+          onDeselect={() => {
+            setSelectedImageEl(null);
+            setSelectedImageIdx(-1);
+          }}
+        />
+      )}
     </div>
   );
 });

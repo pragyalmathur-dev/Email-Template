@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { X, Upload, Link as LinkIcon, Sparkles, Check, Image as ImageIcon } from 'lucide-react';
+import {
+  X,
+  Upload,
+  Link as LinkIcon,
+  Sparkles,
+  Check,
+  Image as ImageIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+} from 'lucide-react';
 import { DetectedImage } from '../types/newsletter';
 import { PRESET_IMAGES } from '../utils/svgAssets';
 
@@ -7,7 +17,12 @@ interface ImageReplacerModalProps {
   isOpen: boolean;
   onClose: () => void;
   targetImage: DetectedImage | null;
-  onSave: (targetImage: DetectedImage, newUrl: string, newAlt?: string) => void;
+  onSave: (
+    targetImage: DetectedImage,
+    newUrl: string,
+    newAlt?: string,
+    newAlign?: 'left' | 'center' | 'right'
+  ) => void;
 }
 
 export const ImageReplacerModal: React.FC<ImageReplacerModalProps> = ({
@@ -21,6 +36,7 @@ export const ImageReplacerModal: React.FC<ImageReplacerModalProps> = ({
   const [activeTab, setActiveTab] = useState<'upload' | 'url' | 'presets'>('upload');
   const [imageUrl, setImageUrl] = useState<string>(targetImage.url);
   const [altText, setAltText] = useState<string>(targetImage.alt || '');
+  const [align, setAlign] = useState<'left' | 'center' | 'right'>('center');
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<string>('');
 
@@ -67,7 +83,7 @@ export const ImageReplacerModal: React.FC<ImageReplacerModalProps> = ({
 
   const handleApply = () => {
     if (imageUrl) {
-      onSave(targetImage, imageUrl, altText);
+      onSave(targetImage, imageUrl, altText, align);
       onClose();
     }
   };
@@ -245,11 +261,70 @@ export const ImageReplacerModal: React.FC<ImageReplacerModalProps> = ({
               />
             </div>
 
+            {/* Image Alignment Buttons */}
+            <div>
+              <label className="block text-xs font-semibold text-neutral-200 mb-1 flex items-center justify-between">
+                <span>Image Alignment</span>
+                <span className="text-[10px] text-amber-400 capitalize">{align}</span>
+              </label>
+              <div className="flex rounded-lg border border-neutral-800 bg-neutral-950 p-1 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setAlign('left')}
+                  className={`flex-1 py-1.5 px-2 flex items-center justify-center gap-1.5 text-xs rounded-md transition-all font-medium ${
+                    align === 'left'
+                      ? 'bg-amber-400 text-neutral-950 font-bold shadow-sm'
+                      : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                  }`}
+                  title="Align Left"
+                >
+                  <AlignLeft className="w-3.5 h-3.5" />
+                  <span>Left</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlign('center')}
+                  className={`flex-1 py-1.5 px-2 flex items-center justify-center gap-1.5 text-xs rounded-md transition-all font-medium ${
+                    align === 'center'
+                      ? 'bg-amber-400 text-neutral-950 font-bold shadow-sm'
+                      : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                  }`}
+                  title="Align Center"
+                >
+                  <AlignCenter className="w-3.5 h-3.5" />
+                  <span>Center</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlign('right')}
+                  className={`flex-1 py-1.5 px-2 flex items-center justify-center gap-1.5 text-xs rounded-md transition-all font-medium ${
+                    align === 'right'
+                      ? 'bg-amber-400 text-neutral-950 font-bold shadow-sm'
+                      : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                  }`}
+                  title="Align Right"
+                >
+                  <AlignRight className="w-3.5 h-3.5" />
+                  <span>Right</span>
+                </button>
+              </div>
+            </div>
+
             {/* Live Preview Thumbnail */}
             {imageUrl && (
               <div>
                 <label className="block text-xs font-medium text-neutral-400 mb-1.5">Selected Image Preview</label>
-                <div className="w-full max-h-48 rounded-lg overflow-hidden border border-neutral-800 bg-neutral-950 flex items-center justify-center p-2">
+                <div
+                  className="w-full max-h-48 rounded-lg overflow-hidden border border-neutral-800 bg-neutral-950 flex p-2"
+                  style={{
+                    justifyContent:
+                      align === 'center'
+                        ? 'center'
+                        : align === 'right'
+                        ? 'flex-end'
+                        : 'flex-start',
+                  }}
+                >
                   <img src={imageUrl} alt={altText || 'Preview'} className="max-h-44 max-w-full object-contain rounded" />
                 </div>
               </div>

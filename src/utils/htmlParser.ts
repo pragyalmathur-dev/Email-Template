@@ -146,7 +146,8 @@ export function updateDocumentImage(
   doc: NewsletterDocument,
   targetImage: DetectedImage,
   newUrl: string,
-  newAlt?: string
+  newAlt?: string,
+  newAlign?: 'left' | 'center' | 'right'
 ): NewsletterDocument {
   // If in raw HTML mode
   if (doc.rawHtmlMode && doc.rawHtmlContent && typeof window !== 'undefined') {
@@ -158,6 +159,27 @@ export function updateDocumentImage(
       const targetImg = imgElements[targetImage.index];
       targetImg.setAttribute('src', newUrl);
       if (newAlt !== undefined) targetImg.setAttribute('alt', newAlt);
+      if (newAlign) {
+        targetImg.style.display = 'block';
+        if (newAlign === 'center') {
+          targetImg.style.marginLeft = 'auto';
+          targetImg.style.marginRight = 'auto';
+          targetImg.style.float = 'none';
+        } else if (newAlign === 'right') {
+          targetImg.style.marginLeft = 'auto';
+          targetImg.style.marginRight = '0px';
+          targetImg.style.float = 'none';
+        } else {
+          targetImg.style.marginLeft = '0px';
+          targetImg.style.marginRight = 'auto';
+          targetImg.style.float = 'none';
+        }
+        const parentTd = targetImg.closest('td');
+        if (parentTd) {
+          parentTd.setAttribute('align', newAlign);
+          parentTd.style.textAlign = newAlign;
+        }
+      }
       return {
         ...doc,
         updatedAt: new Date().toISOString(),
@@ -169,6 +191,15 @@ export function updateDocumentImage(
   // Structured mode
   const newBlocks = doc.blocks.map((block) => {
     if (block.id !== targetImage.blockId) return block;
+
+    if (block.type === 'image-block') {
+      return {
+        ...block,
+        imageUrl: newUrl,
+        imageAlt: newAlt ?? block.imageAlt,
+        align: newAlign ?? block.align,
+      };
+    }
 
     if (block.type === 'hero' && targetImage.fieldKey === 'imageUrl') {
       return { ...block, imageUrl: newUrl, imageAlt: newAlt ?? block.imageAlt };
